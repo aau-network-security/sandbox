@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"strings"
+
 	"text/template"
 
 	"github.com/aau-network-security/openvswitch/ovs"
@@ -178,7 +179,7 @@ func New(ctx context.Context, ifaces map[string]string, bridge string, c *contro
 			CPU:      0.3,
 		},
 		Labels: map[string]string{
-			"nap": "lan_dhcpd",
+			"sandbox": "lan_dhcpd",
 		},
 		UseBridge: false,
 	})

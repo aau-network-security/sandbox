@@ -27,11 +27,11 @@ sudo ip tuntap del mon10 mode tap
 sudo ip tuntap del ALLblue mode tap
 
 
-VBoxManage list runningvms | awk '/nap/ {print $1}' | xargs -I vmid VBoxManage controlvm vmid poweroff
-VBoxManage list vms | awk '/nap/ {print $2}' | xargs -I vmid VBoxManage unregistervm --delete vmid
+VBoxManage list runningvms | awk '/sandbox/ {print $1}' | xargs -I vmid VBoxManage controlvm vmid poweroff
+VBoxManage list vms | awk '/sandbox/ {print $2}' | xargs -I vmid VBoxManage unregistervm --delete vmid
 
 
-rm -rf ~/VirtualBox\ VMs/nap*
+rm -rf ~/VirtualBox\ VMs/sandbox*
 
 #while read -r line; do
  #   vm=$(echo $line | cut -d ' ' -f 2)
@@ -45,18 +45,18 @@ rm -rf ~/VirtualBox\ VMs/nap*
 # Remove all docker containers that have a UUID as name
 #docker ps -a --format '{{.Names}}' | grep -E '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | xargs docker rm -f
 
-docker kill $(docker ps -q -a -f "label=nap")
+docker kill $(docker ps -q -a -f "label=sandbox")
 
-docker rm $(docker ps -q -a -f "label=nap")
+docker rm $(docker ps -q -a -f "label=sandbox")
 
 
 
 
 # Remove all macvlan networks
-docker network rm $(docker network ls -q -f "label=defatt")
+docker network rm $(docker network ls -q -f "label=sandbox")
 
 # Prune entire docker
-docker system prune --filter "label=nap"
+docker system prune --filter "label=sandbox"
 
 # Prune volumes
-docker volume prune --filter "label=nap"
+docker volume prune --filter "label=sandbox"

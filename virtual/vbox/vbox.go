@@ -91,7 +91,7 @@ func NewVMWithSum(path, image string, checksum string, vmOpts ...VMOpt) VM {
 		path:  path,
 		image: image,
 		opts:  vmOpts,
-		id:    fmt.Sprintf("nap-%s%s", image, checksum),
+		id:    fmt.Sprintf("sandbox-%s%s", image, checksum),
 	}
 }
 
@@ -389,7 +389,7 @@ func (vm *vm) Snapshot(name string) error {
 
 func (v *vm) LinkedClone(ctx context.Context, snapshot string, vmOpts ...VMOpt) (VM, error) {
 	newID := strings.Replace(uuid.New().String(), "-", "", -1)
-	newID = fmt.Sprintf("nap-%s", newID)
+	newID = fmt.Sprintf("sandbox-%s", newID)
 	_, err := VBoxCmdContext(ctx, "clonevm", v.id, "--snapshot", snapshot, "--options", "link", "--name", newID, "--register")
 	if err != nil {
 		return nil, err

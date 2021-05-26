@@ -6,14 +6,14 @@ The starting point is the target VM, afterwards, networks are populated with add
 
 ### How to run?
 
-To run this, you need to be on a Linux-based system. First, you will need to specify the folder where the platform can
-for *.ovafiles*. Update **ova-dir** from `config.yml`  according to your needs.
+To run this, you need to be on a Linux-based system. First, you will need to specify the folder where the platform can look
+for *.ovafiles*. Update **ova-dir** from `config.yml` according to your needs.
 
 > `config/config.yml`
 
 Sandbox works on 4 parameters:
 
-1. Tag -- Name of the experiment (e.g `test`); default comes with **test**
+1. Tag -- Name of the experiment (e.g `test`); default comes with **test**; avoid **game**
 2. vmsName -- .ovafile to used for population of networks; default value is **ubuntu.ova**
 3. targetVM -- .ovafile used as target machine; default value is **ubuntu.ova**
 4. networksNo -- number of networks to be created; default value is **3**
