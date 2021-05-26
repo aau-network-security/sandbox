@@ -177,7 +177,7 @@ func (g *environment) Close() error {
 	return nil
 }
 
-func (g *environment) CreateSandbox(tag, targetVM, VMname string, numNetworks int) error {
+func (g *environment) CreateSandbox(tag, VMname string, numNetworks int) error {
 	log.Info().Str("Experiment name ", tag).
 		Int("Number of Networks", numNetworks).
 		Msgf("Creating sandbox")
@@ -213,18 +213,17 @@ func (g *environment) CreateSandbox(tag, targetVM, VMname string, numNetworks in
 
 	for _, vlans := range availableVlans {
 		if strings.Contains(vlans, "vlan10") {
-			if err := g.createTargetVM(vlans, targetVM); err != nil {
+			if err := g.createTargetVM(vlans, VMname); err != nil {
 				//log.Error().Strs("%s", vlans).Msgf("Error in initializing Wireguard")
 				log.Error().Err(err).Msgf("Error in attaching targetVM to correct network")
 
 			}
-			continue
 
-		}
+			if err := g.populateNetworks(vlans, VMname); err != nil {
 
-		if err := g.populateNetworks(vlans, VMname); err != nil {
+				log.Error().Err(err).Msgf("Error in populating the networks with vms")
 
-			log.Error().Err(err).Msgf("Error in populating the networks with vms")
+			}
 
 		}
 
@@ -516,10 +515,10 @@ func (g *environment) initializeOVSBridge(bridgeName string) error {
 
 // the rest of the Devies in Bridged, Preferably some windows.
 
-func (env *environment) createTargetVM(network string, targetVM string) error {
-	log.Debug().Str("On vlan ", network).Msgf("is the target machine")
+func (env *environment) createTargetVM(network string, vmName string) error {
+	log.Debug().Str("Service Port", "5353").Str("VPN Port", "51820").Msgf("Initalizing VPN endpoint for the game")
 	vm, err := env.vlib.GetCopy(context.Background(),
-		vbox.InstanceConfig{Image: targetVM,
+		vbox.InstanceConfig{Image: vmName,
 			CPU:      1,
 			MemoryMB: 2048},
 		// SetBridge parameter cleanFirst should be enabled if you want to delete all interfaces first
@@ -541,7 +540,7 @@ func (env *environment) createTargetVM(network string, targetVM string) error {
 		log.Debug().Msgf("VM [ %s ] is starting .... ", vm.Info().Id)
 
 		if err := vm.Start(context.Background()); err != nil {
-			log.Error().Msgf("Failed to start target machine")
+			log.Error().Msgf("Failed to start virtual machine on Vlan ")
 			return err
 		}
 	}
