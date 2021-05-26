@@ -10,19 +10,19 @@
 #    exit 1
 #fi
 
-sudo ovs-vsctl del-br game
+sudo ovs-vsctl del-br test
 sudo ip tuntap del tap0 mode tap
-sudo ip tuntap del tap1 mode tap
-sudo ip tuntap del tap2 mode tap
-sudo ip tuntap del tap3 mode tap
-sudo ip tuntap del tap4 mode tap
-sudo ip tuntap del tap5 mode tap
-sudo ip tuntap del tap6 mode tap
-sudo ip tuntap del vlan10 mode tap
-sudo ip tuntap del vlan20 mode tap
-sudo ip tuntap del vlan30 mode tap
-sudo ip tuntap del vlan40 mode tap
-sudo ip tuntap del vlan50 mode tap
+sudo ip tuntap del tap10 mode tap
+sudo ip tuntap del tap20 mode tap
+sudo ip tuntap del tap30 mode tap
+sudo ip tuntap del tap40 mode tap
+sudo ip tuntap del tap50 mode tap
+sudo ip tuntap del tap60 mode tap
+sudo ip tuntap del vlan110 mode tap
+sudo ip tuntap del vlan220 mode tap
+sudo ip tuntap del vlan330 mode tap
+sudo ip tuntap del vlan440 mode tap
+sudo ip tuntap del vlan550 mode tap
 sudo ip tuntap del mon10 mode tap
 sudo ip tuntap del ALLblue mode tap
 

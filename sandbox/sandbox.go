@@ -242,9 +242,9 @@ func (g *environment) createRandomNetworks(bridge string, numberOfNetworks int) 
 	log.Info().Msgf("Creating randomized Networks for chosen number of Networks %d", numberOfNetworks)
 	//Always creating +1 network for the monitoring machine.
 	for i := 1; i <= numberOfNetworks; i++ {
-		vlan := fmt.Sprintf("vlan%d", i*10)
+		vlan := fmt.Sprintf("vlan%d", i*110)
 		vlansList = append(vlansList, vlan)
-		vlanTags[vlan] = fmt.Sprintf("%d", i*10)
+		vlanTags[vlan] = fmt.Sprintf("%d", i*110)
 		if err := g.controller.Ovs.VSwitch.AddPortTagged(bridge, vlan, fmt.Sprintf("%d", i*10)); err != nil {
 			log.Error().Msgf("Error on adding port with tag err %v", err)
 			return err
@@ -261,7 +261,7 @@ func (g *environment) createRandomNetworks(bridge string, numberOfNetworks int) 
 		// ifconfig tap2 up
 		//ip tuntap add tap4 mode tap
 		//ifconfig tap4 up
-		t := fmt.Sprintf("tap%d", i)
+		t := fmt.Sprintf("tap%d", i*10)
 		if err := g.controller.IPService.AddTunTap(t, "tap"); err != nil {
 			log.Error().Msgf("Error happened on adding tuntap %v", err)
 			return err
@@ -271,7 +271,7 @@ func (g *environment) createRandomNetworks(bridge string, numberOfNetworks int) 
 			return err
 		}
 
-		tag := fmt.Sprintf("%d", i*10)
+		tag := fmt.Sprintf("%d", i*110)
 		//ovs-vsctl add-port SW tap0 tag=10
 		//ovs-vsctl add-port SW tap2 tag=20
 		//ovs-vsctl add-port SW tap4 tag=30
@@ -292,26 +292,26 @@ func (g *environment) createRandomNetworks(bridge string, numberOfNetworks int) 
 	//TODO: Make assign the monitoring network smarter ! Now is hardcoded.
 
 	//How it is happening now will be a problem for multiple games
-	i := 1
-
-	monitor := fmt.Sprintf("mon%d", i*10)
-
-	if err := g.controller.Ovs.VSwitch.AddPort(bridge, monitor); err != nil {
-		log.Error().Msgf("Error on adding port with tag err %v", err)
-		return err
-	}
-
-	m := fmt.Sprintf("mon%d", i*10)
-	if err := g.controller.IPService.AddTunTap(m, "tap"); err != nil {
-		log.Error().Msgf("Error happened on adding monitor tuntap %v", err)
-		return err
-	}
-	if err := g.controller.IFConfig.TapUp(m); err != nil {
-		log.Error().Msgf("Error happened on making up monitor %s %v", m, err)
-		return err
-	}
-	//adding the monitoring port in the networks
-	vlanTags["monitor"] = ""
+	//i := 1
+	//
+	//monitor := fmt.Sprintf("mon%d", i*110)
+	//
+	//if err := g.controller.Ovs.VSwitch.AddPort(bridge, monitor); err != nil {
+	//	log.Error().Msgf("Error on adding port with tag err %v", err)
+	//	return err
+	//}
+	//
+	//m := fmt.Sprintf("mon%d", i*10)
+	//if err := g.controller.IPService.AddTunTap(m, "tap"); err != nil {
+	//	log.Error().Msgf("Error happened on adding monitor tuntap %v", err)
+	//	return err
+	//}
+	//if err := g.controller.IFConfig.TapUp(m); err != nil {
+	//	log.Error().Msgf("Error happened on making up monitor %s %v", m, err)
+	//	return err
+	//}
+	////adding the monitoring port in the networks
+	//vlanTags["monitor"] = ""
 
 	server, err := dhcp.New(context.TODO(), vlanTags, bridge, &g.controller)
 	if err != nil {
