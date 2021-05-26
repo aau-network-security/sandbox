@@ -91,7 +91,7 @@ func NewVMWithSum(path, image string, checksum string, vmOpts ...VMOpt) VM {
 		path:  path,
 		image: image,
 		opts:  vmOpts,
-		id:    fmt.Sprintf("nap-%s%s", image, checksum),
+		id:    fmt.Sprintf("sandbox-%s%s", image, checksum),
 	}
 }
 
@@ -214,7 +214,39 @@ func removeAllNICs(ctx context.Context, vm *vm) error {
 	return nil
 }
 
-func SetBridge(nics []string, cleanFirst bool) VMOpt {
+func SetHostOnly(cleanFirst bool) VMOpt {
+
+	return func(ctx context.Context, vm *vm) error {
+		// Removes all NIC cards from importing VMs
+		if cleanFirst {
+			if err := removeAllNICs(ctx, vm); err != nil {
+				return err
+			}
+		}
+
+		i := 1 // first nic will be used for port mapping/forwarding
+		//log.Info().Msgf("Nic List %v", nics)
+
+		log.Debug().Msgf("Setting the HostOnly vboxnet0 interface")
+
+		//VBoxManage modifyvm $VM_NAME --nic2 hostonly --hostonlyadapter2 vboxnet0
+
+		_, err := VBoxCmdContext(ctx, vboxModVM, vm.id, fmt.Sprintf("--nic%d", i), "hostonly", fmt.Sprintf("--hostonlyadapter%d", i), "vboxnet0")
+		if err != nil {
+			return err
+		}
+		// allows promiscuous mode
+		log.Debug().Msgf("Allowing promisc mode for bridge name: %s ", fmt.Sprintf("--nicpromisc%d", i+1))
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}
+
+}
+
+func SetBridge(nic string, cleanFirst bool) VMOpt {
 
 	// for defatt, go through provided nics.
 	return func(ctx context.Context, vm *vm) error {
@@ -229,20 +261,19 @@ func SetBridge(nics []string, cleanFirst bool) VMOpt {
 		}
 		// enables specified NIC card in purpose
 		i := 1 // first nic will be used for port mapping/forwarding
-		log.Info().Msgf("Nic List %v", nics)
-		for _, n := range nics {
-			log.Debug().Msgf("Attaching vlan %s to brigde adapter %s", n, fmt.Sprintf("--nic%d", i+1))
-			_, err := VBoxCmdContext(ctx, vboxModVM, vm.id, fmt.Sprintf("--nic%d", i+1), "bridged", fmt.Sprintf("--bridgeadapter%d", i+1), n)
-			if err != nil {
-				return err
-			}
-			// allows promiscuous mode
-			log.Debug().Msgf("Allowing promisc mode for bridge name: %s ", fmt.Sprintf("--nicpromisc%d", i+1))
-			err = enableProsmiscMode(ctx, vm.id, i+1)
-			if err != nil {
-				return err
-			}
-			i++
+		//log.Info().Msgf("Nic List %v", nics)
+
+		log.Debug().Msgf("Attaching vlan %s to brigde adapter %s", nic, fmt.Sprintf("--nic%d", i+1))
+		_, err := VBoxCmdContext(ctx, vboxModVM, vm.id, fmt.Sprintf("--nic%d", i+1), "bridged", fmt.Sprintf("--bridgeadapter%d", i+1), nic)
+		if err != nil {
+			return err
+		}
+
+		// allows promiscuous mode
+		log.Debug().Msgf("Allowing promisc mode for bridge name: %s ", fmt.Sprintf("--nicpromisc%d", i+1))
+		err = enableProsmiscMode(ctx, vm.id, i+1)
+		if err != nil {
+			return err
 		}
 
 		return nil
@@ -358,7 +389,7 @@ func (vm *vm) Snapshot(name string) error {
 
 func (v *vm) LinkedClone(ctx context.Context, snapshot string, vmOpts ...VMOpt) (VM, error) {
 	newID := strings.Replace(uuid.New().String(), "-", "", -1)
-	newID = fmt.Sprintf("nap-%s", newID)
+	newID = fmt.Sprintf("sandbox-%s", newID)
 	_, err := VBoxCmdContext(ctx, "clonevm", v.id, "--snapshot", snapshot, "--options", "link", "--name", newID, "--register")
 	if err != nil {
 		return nil, err

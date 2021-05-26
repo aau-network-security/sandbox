@@ -8,4 +8,5 @@ require (
 	github.com/fsouza/go-dockerclient v1.7.2
 	github.com/google/uuid v1.2.0
 	github.com/rs/zerolog v1.22.0
+	github.com/spf13/cobra v0.0.2-0.20171109065643-2da4a54c5cee
 )

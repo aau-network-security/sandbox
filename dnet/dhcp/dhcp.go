@@ -9,11 +9,12 @@ import (
 	"net"
 	"os"
 	"strings"
+
 	"text/template"
 
-	"github.com/aau-network-security/defat/controller"
-	"github.com/aau-network-security/defat/virtual/docker"
 	"github.com/aau-network-security/openvswitch/ovs"
+	"github.com/aau-network-security/sandbox/controller"
+	"github.com/aau-network-security/sandbox/virtual/docker"
 	"github.com/rs/zerolog/log"
 )
 
@@ -178,7 +179,7 @@ func New(ctx context.Context, ifaces map[string]string, bridge string, c *contro
 			CPU:      0.3,
 		},
 		Labels: map[string]string{
-			"nap": "lan_dhcpd",
+			"sandbox": "lan_dhcpd",
 		},
 		UseBridge: false,
 	})
