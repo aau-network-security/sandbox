@@ -256,9 +256,9 @@ func SetBridge(nic string, cleanFirst bool) VMOpt {
 				return err
 			}
 		}
-		if err := enableProsmiscMode(ctx, vm.id, 1); err != nil {
-			return err
-		}
+		//if err := enableProsmiscMode(ctx, vm.id, 1); err != nil {
+		//	return err
+		//}
 		// enables specified NIC card in purpose
 		i := 1 // first nic will be used for port mapping/forwarding
 		//log.Info().Msgf("Nic List %v", nics)

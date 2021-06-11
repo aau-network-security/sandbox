@@ -212,7 +212,7 @@ func (g *environment) CreateSandbox(tag, targetVM, VMname string, numNetworks in
 	}
 
 	for _, vlans := range availableVlans {
-		if strings.Contains(vlans, "vlan10") {
+		if strings.Contains(vlans, "vlan110") {
 			if err := g.createTargetVM(vlans, targetVM); err != nil {
 				//log.Error().Strs("%s", vlans).Msgf("Error in initializing Wireguard")
 				log.Error().Err(err).Msgf("Error in attaching targetVM to correct network")
@@ -286,7 +286,7 @@ func (g *environment) createRandomNetworks(bridge string, numberOfNetworks int) 
 		}
 	}
 
-	log.Info().Msgf("Creating the monitoring network")
+	//log.Info().Msgf("Creating the monitoring network")
 	//Always creating +1 network for the monitoring machine.
 
 	//TODO: Make assign the monitoring network smarter ! Now is hardcoded.

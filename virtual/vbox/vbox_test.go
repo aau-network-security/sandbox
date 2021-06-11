@@ -13,8 +13,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aau-network-security/defat/virtual"
-	"github.com/aau-network-security/defat/virtual/vbox"
+	"github.com/aau-network-security/sandbox/virtual"
+	"github.com/aau-network-security/sandbox/virtual/vbox"
 )
 
 const (
