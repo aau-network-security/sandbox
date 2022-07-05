@@ -1,23 +1,41 @@
-package dhcp
+package wg
 
 import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"io/ioutil"
 	"strconv"
+	"strings"
 
-	"github.com/aau-network-security/sandbox/dnet/dhcp/proto"
-	"github.com/aau-network-security/sandbox/dnet/wg"
+	vpn "github.com/aau-network-security/defatt/dnet/wg/proto"
 	"github.com/golang-jwt/jwt"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/status"
 )
 
 var (
-	AUTH_KEY = "wg"
+	ErrUnreachableVPNService = errors.New("wireguard service is not running ")
+	ErrUnauthorized          = errors.New("unauthorized attempt to use VPN service ")
+	NoTokenErrMsg            = "token contains an invalid number of segments"
+	UnauthorizeErrMsg        = "unauthorized"
+	AUTH_KEY                 = "wg"
 )
+
+type WireGuardConfig struct {
+	Endpoint string
+	Port     uint64
+	AuthKey  string
+	SignKey  string
+	Enabled  bool
+	CertFile string
+	CertKey  string
+	CAFile   string
+	Dir      string // client configuration file will reside
+}
 
 type Creds struct {
 	Token    string
@@ -34,14 +52,14 @@ func (c Creds) RequireTransportSecurity() bool {
 	return !c.Insecure
 }
 
-func NewDHCPClient(ctx context.Context, wgConn wg.WireGuardConfig, port uint) (proto.DHCPClient, error) {
+func NewGRPCVPNClient(ctx context.Context, wgConn WireGuardConfig, port uint) (vpn.WireguardClient, error) {
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		AUTH_KEY: wgConn.AuthKey,
 	})
 	tokenString, err := token.SignedString([]byte(wgConn.SignKey))
 	if err != nil {
-		return nil, err
+		return nil, TranslateRPCErr(err)
 	}
 
 	authCreds := Creds{Token: tokenString}
@@ -88,17 +106,39 @@ func NewDHCPClient(ctx context.Context, wgConn wg.WireGuardConfig, port uint) (p
 		conn, err := grpc.DialContext(ctx, wgConn.Endpoint+":"+strconv.FormatUint(uint64(port), 10), dialOpts...)
 		if err != nil {
 			log.Error().Msgf("Error on dialing vpn service: %v", err)
-			return nil, err
+			return nil, TranslateRPCErr(err)
 		}
-		c := proto.NewDHCPClient(conn)
+		c := vpn.NewWireguardClient(conn)
 		return c, nil
 	}
 
 	authCreds.Insecure = true
 	conn, err := grpc.DialContext(ctx, wgConn.Endpoint+":"+strconv.FormatUint(uint64(port), 10), grpc.WithInsecure(), grpc.WithPerRPCCredentials(authCreds), grpc.WithBlock())
 	if err != nil {
-		return nil, err
+		return nil, TranslateRPCErr(err)
 	}
-	c := proto.NewDHCPClient(conn)
+	c := vpn.NewWireguardClient(conn)
 	return c, nil
+}
+
+func TranslateRPCErr(err error) error {
+	st, ok := status.FromError(err)
+	if ok {
+		msg := st.Message()
+		switch {
+		case UnauthorizeErrMsg == msg:
+			return ErrUnauthorized
+
+		case NoTokenErrMsg == msg:
+			return ErrUnauthorized
+
+		case strings.Contains(msg, "TransientFailure"):
+
+			return ErrUnreachableVPNService
+		}
+
+		return err
+	}
+
+	return err
 }

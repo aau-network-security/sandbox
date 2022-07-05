@@ -56,7 +56,7 @@ func (err *VBoxErr) Error() string {
 type VM interface {
 	virtual.Instance
 	Snapshot(string) error
-	LinkedClone(context.Context, string, ...VMOpt) (VM, error)
+	LinkedClone(context.Context, string, string, ...VMOpt) (VM, error)
 }
 
 type InstanceConfig struct {
@@ -66,7 +66,7 @@ type InstanceConfig struct {
 }
 
 type Library interface {
-	GetCopy(context.Context, InstanceConfig, ...VMOpt) (VM, error)
+	GetCopy(context.Context, string, InstanceConfig, ...VMOpt) (VM, error)
 	IsAvailable(string) bool
 }
 
@@ -91,7 +91,7 @@ func NewVMWithSum(path, image string, checksum string, vmOpts ...VMOpt) VM {
 		path:  path,
 		image: image,
 		opts:  vmOpts,
-		id:    fmt.Sprintf("sandbox-%s%s", image, checksum),
+		id:    fmt.Sprintf("%s%s", image, checksum),
 	}
 }
 
@@ -133,7 +133,7 @@ func (vm *vm) Start(ctx context.Context) error {
 
 	vm.running = true
 
-	log.Debug().
+	log.Debug().Str("Image", vm.image).
 		Str("ID", vm.id).
 		Msg("Started VM")
 
@@ -174,7 +174,7 @@ func (vm *vm) Suspend(ctx context.Context) error {
 }
 
 func (vm *vm) Close() error {
-	_, err := vm.ensureStopped(nil)
+	_, err := vm.ensureStopped(context.TODO())
 	if err != nil {
 		log.Warn().
 			Str("ID", vm.id).
@@ -214,39 +214,7 @@ func removeAllNICs(ctx context.Context, vm *vm) error {
 	return nil
 }
 
-func SetHostOnly(cleanFirst bool) VMOpt {
-
-	return func(ctx context.Context, vm *vm) error {
-		// Removes all NIC cards from importing VMs
-		if cleanFirst {
-			if err := removeAllNICs(ctx, vm); err != nil {
-				return err
-			}
-		}
-
-		i := 1 // first nic will be used for port mapping/forwarding
-		//log.Info().Msgf("Nic List %v", nics)
-
-		log.Debug().Msgf("Setting the HostOnly vboxnet0 interface")
-
-		//VBoxManage modifyvm $VM_NAME --nic2 hostonly --hostonlyadapter2 vboxnet0
-
-		_, err := VBoxCmdContext(ctx, vboxModVM, vm.id, fmt.Sprintf("--nic%d", i), "hostonly", fmt.Sprintf("--hostonlyadapter%d", i), "vboxnet0")
-		if err != nil {
-			return err
-		}
-		// allows promiscuous mode
-		log.Debug().Msgf("Allowing promisc mode for bridge name: %s ", fmt.Sprintf("--nicpromisc%d", i+1))
-		if err != nil {
-			return err
-		}
-
-		return nil
-	}
-
-}
-
-func SetBridge(nic string, cleanFirst bool) VMOpt {
+func SetBridge(nics []string, cleanFirst bool) VMOpt {
 
 	// for defatt, go through provided nics.
 	return func(ctx context.Context, vm *vm) error {
@@ -256,29 +224,55 @@ func SetBridge(nic string, cleanFirst bool) VMOpt {
 				return err
 			}
 		}
-		//if err := enableProsmiscMode(ctx, vm.id, 1); err != nil {
-		//	return err
-		//}
-		// enables specified NIC card in purpose
-		i := 1 // first nic will be used for port mapping/forwarding
-		//log.Info().Msgf("Nic List %v", nics)
-
-		log.Debug().Msgf("Attaching vlan %s to brigde adapter %s", nic, fmt.Sprintf("--nic%d", i+1))
-		_, err := VBoxCmdContext(ctx, vboxModVM, vm.id, fmt.Sprintf("--nic%d", i+1), "bridged", fmt.Sprintf("--bridgeadapter%d", i+1), nic)
-		if err != nil {
+		if err := enableProsmiscMode(ctx, vm.id, 1); err != nil {
 			return err
 		}
-
-		// allows promiscuous mode
-		log.Debug().Msgf("Allowing promisc mode for bridge name: %s ", fmt.Sprintf("--nicpromisc%d", i+1))
-		err = enableProsmiscMode(ctx, vm.id, i+1)
-		if err != nil {
-			return err
+		// enables specified NIC card in purpose
+		i := 1 // first nic will be used for port mapping/forwarding
+		log.Info().Msgf("Nic List %v", nics)
+		for _, n := range nics {
+			log.Debug().Msgf("Attaching vlan %s to brigde adapter %s", n, fmt.Sprintf("--nic%d", i+1))
+			_, err := VBoxCmdContext(ctx, vboxModVM, vm.id, fmt.Sprintf("--nic%d", i+1), "bridged", fmt.Sprintf("--bridgeadapter%d", i+1), n)
+			if err != nil {
+				return err
+			}
+			// allows promiscuous mode
+			log.Debug().Msgf("Allowing promisc mode for bridge name: %s ", fmt.Sprintf("--nicpromisc%d", i+1))
+			err = enableProsmiscMode(ctx, vm.id, i+1)
+			if err != nil {
+				return err
+			}
+			i++
 		}
 
 		return nil
 	}
 }
+
+func PortForward(min, max int) VMOpt {
+	return func(ctx context.Context, vm *vm) error {
+		for i := min; i <= max; i++ {
+			_, err := VBoxCmdContext(ctx, vboxModVM, vm.id, "--natpf1", fmt.Sprintf("%s,%s,,%d,,%d", fmt.Sprintf("vpn_port_%d", i), "udp", i, i))
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+}
+
+//func SetNameofVM() VMOpt {
+//	//var vmName = ""
+//	return func(ctx context.Context, vm *vm) (error) {
+//
+//		_, err := VBoxCmdContext(ctx, vboxModVM, vm.id, "--name", fmt.Sprintf("nap-%s", vm.id[:8]))
+//		if err != nil {
+//			return err
+//		}
+//		return nil
+//	}
+//
+//}
 
 func enableProsmiscMode(ctx context.Context, vmID string, nic int) error {
 	_, err := VBoxCmdContext(ctx, vboxModVM, vmID, fmt.Sprintf("--nicpromisc%d", nic), "allow-all")
@@ -355,8 +349,7 @@ func SetRAM(mb uint) VMOpt {
 
 func SetMAC(macaddr string, nic int) VMOpt {
 	return func(ctx context.Context, vm *vm) error {
-		//_, err := VBoxCmdContext(ctx, vboxModVM, vm.id, fmt.Sprintf("--macaddress%s", nic), macaddr)
-		_, err := VBoxCmdContext(ctx, vboxModVM, vm.id, "--macaddress3", macaddr)
+		_, err := VBoxCmdContext(ctx, vboxModVM, vm.id, fmt.Sprintf("--macaddress%d", nic), macaddr)
 		return err
 	}
 }
@@ -387,9 +380,9 @@ func (vm *vm) Snapshot(name string) error {
 	return nil
 }
 
-func (v *vm) LinkedClone(ctx context.Context, snapshot string, vmOpts ...VMOpt) (VM, error) {
+func (v *vm) LinkedClone(ctx context.Context, tag string, snapshot string, vmOpts ...VMOpt) (VM, error) {
 	newID := strings.Replace(uuid.New().String(), "-", "", -1)
-	newID = fmt.Sprintf("sandbox-%s", newID)
+	newID = fmt.Sprintf("nap-%s-%s", tag, newID)
 	_, err := VBoxCmdContext(ctx, "clonevm", v.id, "--snapshot", snapshot, "--options", "link", "--name", newID, "--register")
 	if err != nil {
 		return nil, err
@@ -463,7 +456,7 @@ func (lib *vBoxLibrary) getPathFromFile(file string) string {
 	return file
 }
 
-func (lib *vBoxLibrary) GetCopy(ctx context.Context, conf InstanceConfig, vmOpts ...VMOpt) (VM, error) {
+func (lib *vBoxLibrary) GetCopy(ctx context.Context, tag string, conf InstanceConfig, vmOpts ...VMOpt) (VM, error) {
 	path := lib.getPathFromFile(conf.Image)
 
 	lib.m.Lock()
@@ -476,7 +469,7 @@ func (lib *vBoxLibrary) GetCopy(ctx context.Context, conf InstanceConfig, vmOpts
 
 	log.Debug().
 		Str("path", path).
-		Bool("first_time", ok == false).
+		Bool("first_time", !ok).
 		Msg("getting path lock")
 
 	lib.m.Unlock()
@@ -486,7 +479,7 @@ func (lib *vBoxLibrary) GetCopy(ctx context.Context, conf InstanceConfig, vmOpts
 
 	vm, ok := lib.known[path]
 	if ok {
-		return vm.LinkedClone(ctx, "origin", vmOpts...) // if ok==true then VM will be linked without the ram value which is exist on configuration file
+		return vm.LinkedClone(ctx, tag, "origin", vmOpts...) // if ok==true then VM will be linked without the ram value which is exist on configuration file
 		// vbox.SetRAM(conf.memoryMB) on addFrontend function in lab.go fixes the problem...
 	}
 	// if ok==false, then following codes will be run, in that case there will be no problem because at the end instance returns with specified VMOpts parameter.
@@ -522,7 +515,7 @@ func (lib *vBoxLibrary) GetCopy(ctx context.Context, conf InstanceConfig, vmOpts
 		vmOpts = append(vmOpts, SetRAM(conf.MemoryMB))
 	}
 
-	instance, err := vm.LinkedClone(ctx, "origin", vmOpts...)
+	instance, err := vm.LinkedClone(ctx, tag, "origin", vmOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -557,7 +550,7 @@ func checksumOfFile(filepath string) (string, error) {
 }
 
 func VmExists(image string, checksum string) (VM, bool) {
-	name := fmt.Sprintf("%s{%s}", image, checksum)
+	name := fmt.Sprintf("%s%s", image, checksum)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
