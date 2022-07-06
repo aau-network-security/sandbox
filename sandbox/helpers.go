@@ -1,4 +1,4 @@
-package game
+package sandbox
 
 import (
 	"fmt"

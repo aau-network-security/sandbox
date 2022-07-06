@@ -1,22 +1,18 @@
 package config
 
 import (
-	"errors"
 	"fmt"
-	"github.com/alecthomas/gometalinter/_linters/src/gopkg.in/yaml.v2"
-	"io/ioutil"
-	"os/user"
-	"path/filepath"
-
 	"github.com/aau-network-security/sandbox/virtual/docker"
+	"github.com/alecthomas/gometalinter/_linters/src/gopkg.in/yaml.v2"
 	dockerclient "github.com/fsouza/go-dockerclient"
 	"github.com/rs/zerolog/log"
+	"io/ioutil"
 )
 
 type Config struct {
-	VmConfig           VmConfig                         `yaml:"vm-config"`
-	WireguardService   WgConnConf                       `yaml:"wireguard-service"`
-	DefatConfig        DefattConf                       `yaml:"defat-config"`
+	VmConfig VmConfig `yaml:"vm-config"`
+	//WireguardService   WgConnConf                       `yaml:"wireguard-service"`
+	//DefatConfig        DefattConf                       `yaml:"defat-config"`
 	DockerRepositories []dockerclient.AuthConfiguration `yaml:"docker-repositories"`
 }
 
@@ -25,30 +21,30 @@ type VmConfig struct {
 	//OvaDir string `yaml:"ova-test"` //use for local test
 }
 
-type DefattConf struct {
-	Endpoint   string            `yaml:"endpoint"`
-	Port       uint64            `yaml:"port"`
-	SigningKey string            `yaml:"sign-key"`
-	UsersFile  string            `yaml:"users-file"`
-	CertConf   CertificateConfig `yaml:"tls"`
-}
+//type DefattConf struct {
+//	Endpoint   string            `yaml:"endpoint"`
+//	Port       uint64            `yaml:"port"`
+//	SigningKey string            `yaml:"sign-key"`
+//	UsersFile  string            `yaml:"users-file"`
+//	CertConf   CertificateConfig `yaml:"tls"`
+//}
 
-type WgConnConf struct {
-	Endpoint string            `yaml:"endpoint"`
-	Port     uint64            `yaml:"port"`
-	AuthKey  string            `yaml:"auth-key"`
-	SignKey  string            `yaml:"sign-key"`
-	Dir      string            `yaml:"client-conf-dir"`
-	CertConf CertificateConfig `yaml:"tls"`
-}
-
-type CertificateConfig struct {
-	Enabled   bool   `yaml:"enabled"`
-	Directory string `yaml:"directory"`
-	CertFile  string `yaml:"certfile"`
-	CertKey   string `yaml:"certkey"`
-	CAFile    string `yaml:"cafile"`
-}
+//type WgConnConf struct {
+//	Endpoint string            `yaml:"endpoint"`
+//	Port     uint64            `yaml:"port"`
+//	AuthKey  string            `yaml:"auth-key"`
+//	SignKey  string            `yaml:"sign-key"`
+//	Dir      string            `yaml:"client-conf-dir"`
+//	CertConf CertificateConfig `yaml:"tls"`
+//}
+//
+//type CertificateConfig struct {
+//	Enabled   bool   `yaml:"enabled"`
+//	Directory string `yaml:"directory"`
+//	CertFile  string `yaml:"certfile"`
+//	CertKey   string `yaml:"certkey"`
+//	CAFile    string `yaml:"cafile"`
+//}
 
 func NewConfig(path string) (*Config, error) {
 	f, err := ioutil.ReadFile(path)
@@ -70,16 +66,16 @@ func NewConfig(path string) (*Config, error) {
 	if c.VmConfig.OvaDir == "" {
 		return nil, fmt.Errorf("Specify vm directory, err: %v", err)
 	}
-
-	if c.WireguardService.CertConf.Enabled {
-		if c.WireguardService.CertConf.Directory == "" {
-			usr, err := user.Current()
-			if err != nil {
-				return nil, errors.New("Invalid user")
-			}
-			c.WireguardService.CertConf.Directory = filepath.Join(usr.HomeDir, ".local", "share", "certmagic")
-		}
-	}
+	//
+	//if c.WireguardService.CertConf.Enabled {
+	//	if c.WireguardService.CertConf.Directory == "" {
+	//		usr, err := user.Current()
+	//		if err != nil {
+	//			return nil, errors.New("Invalid user")
+	//		}
+	//		c.WireguardService.CertConf.Directory = filepath.Join(usr.HomeDir, ".local", "share", "certmagic")
+	//	}
+	//}
 
 	return &c, nil
 }

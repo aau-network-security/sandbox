@@ -1,4 +1,4 @@
-package game
+package sandbox
 
 import (
 	"context"
@@ -47,8 +47,8 @@ func (env *environment) attachDocker(ctx context.Context, wg *sync.WaitGroup, br
 	container := docker.NewContainer(docker.ContainerConfig{
 		Image: image,
 		Labels: map[string]string{
-			"nap-game":      bridge,
-			"game-networks": strings.Join(nets, ","),
+			"nap-sandbox":      bridge,
+			"sandbox-networks": strings.Join(nets, ","),
 		}})
 
 	if err := container.Create(ctx); err != nil {
@@ -171,28 +171,6 @@ func (env *environment) attachVM(ctx context.Context, wg *sync.WaitGroup, name, 
 		}
 
 	}
-	//if name == "DCcon" {
-	//	vm, err := env.vlib.GetCopy(ctx,
-	//		bridge,
-	//		vbox.InstanceConfig{Image: image,
-	//			CPU:      1,
-	//			MemoryMB: 2048},
-	//		vbox.SetBridge(ifaceNames, true),
-	//		vbox.SetMAC("04d3b0c757c7", 1),
-	//
-	//	)
-	//	log.Error().Err(err).Msg("VM not created ")
-	//	return err
-	//
-	//	if vm == nil {
-	//		return ErrVMNotCreated
-	//	}
-	//	env.instances = append(env.instances, vm)
-	//	if err := vm.Start(ctx); err != nil {
-	//		log.Error().Err(err).Msg("starting mailserver virtual machine")
-	//		return err
-	//	}
-	//}
 
 	return nil
 }

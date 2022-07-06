@@ -55,7 +55,7 @@ func init() {
 		log.Fatal().Err(err).Msg("")
 	}
 
-	DefaultLinkBridge, err = newDefaultBridge("defatt-bridge")
+	DefaultLinkBridge, err = newDefaultBridge("sandbox-bridge")
 	if err != nil {
 		log.Fatal().Err(err).Msg("Error creating default bridge")
 	}

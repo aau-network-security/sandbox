@@ -7,7 +7,7 @@ import (
 
 	"github.com/aau-network-security/sandbox/models"
 	"github.com/rs/zerolog/log"
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 )
 
 var (
@@ -15,15 +15,15 @@ var (
 )
 
 type Scenario struct {
-	Name       string           `yaml:"name"`
-	Topic      string           `yaml:"topic"`
-	FQDN       string           `yaml:"FQDN"`
-	StoryRed   string           `yaml:"story-red"`
-	StoryBlue  string           `yaml:"story-blue"`
-	Duration   uint32           `yaml:"duration"`
-	Difficulty string           `yaml:"difficulty"`
-	Networks   []models.Network `yaml:"networks"`
-	Hosts      []models.Host    `yaml:"hosts"`
+	Name string `yaml:"name"`
+	//Topic      string           `yaml:"topic"`
+	//FQDN       string           `yaml:"FQDN"`
+	//StoryRed   string           `yaml:"story-red"`
+	//StoryBlue  string           `yaml:"story-blue"`
+	//Duration   uint32           `yaml:"duration"`
+	//Difficulty string           `yaml:"difficulty"`
+	Networks []models.Network `yaml:"networks"`
+	Hosts    []models.Host    `yaml:"hosts"`
 }
 
 // LoadScenarios will all files in a directory into a map of Scenario
