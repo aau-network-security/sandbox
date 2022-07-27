@@ -131,7 +131,7 @@ func (env *environment) attachVM(ctx context.Context, wg *sync.WaitGroup, name, 
 			bridge,
 			vbox.InstanceConfig{Image: "win10NoWDMail2.ova",
 				CPU:      2,
-				MemoryMB: 8192},
+				MemoryMB: 4096},
 			vbox.SetBridge(ifaceNames, true),
 			vbox.SetMAC("04d3b0c757c7", 2),
 		)

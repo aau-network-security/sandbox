@@ -79,4 +79,5 @@ func main() {
 		log.Error().Msg("Problem in starting the sandbox2")
 	}
 
+	fmt.Println("It seems that the sandbox is ON")
 }

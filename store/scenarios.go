@@ -2,12 +2,10 @@ package store
 
 import (
 	"errors"
-	"io/ioutil"
-	"os"
-
 	"github.com/aau-network-security/sandbox/models"
 	"github.com/rs/zerolog/log"
 	"gopkg.in/yaml.v2"
+	"io/ioutil"
 )
 
 var (
@@ -30,7 +28,7 @@ type Scenario struct {
 func LoadScenarios(path string) (map[int]Scenario, error) {
 	scenarios := make(map[int]Scenario)
 
-	files, err := os.ReadDir(path)
+	files, err := ioutil.ReadDir(path)
 	if err != nil {
 		return nil, err
 	}
