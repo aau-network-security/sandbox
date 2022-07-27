@@ -10,8 +10,8 @@ import (
 	"fmt"
 	"github.com/aau-network-security/sandbox/store"
 	"github.com/aau-network-security/sandbox/virtual"
-	//"github.com/aau-network-security/defatt/game"
-	//"github.com/aau-network-security/sandbox/store"
+	//"github.com/aau-network-security/defatt/sandbox"
+	//"github.com/aau-network-security/sandbox2/store"
 	//"github.com/aau-network-security/defatt/virtual"
 
 	//"github.com/aau-network-security/defatt/virtual"
@@ -168,7 +168,7 @@ func New(bridge string, ipList map[string]string, scenario store.Scenario, IPMai
 			}
 			if hosts.Name == "DCcon" {
 				records.IPAddressDC = IPdc
-				//records.IPAddressDC = game.ConstructStaticIP(ipList,hosts.Networks,".251")
+				//records.IPAddressDC = sandbox.ConstructStaticIP(ipList,hosts.Networks,".251")
 				records.DomainDC = hosts.DNS
 
 			}
@@ -216,7 +216,7 @@ func New(bridge string, ipList map[string]string, scenario store.Scenario, IPMai
 		},
 		Cmd: []string{"--conf", "Corefile"},
 		Labels: map[string]string{
-			"nap-game": bridge,
+			"nap-sandbox": bridge,
 		},
 	})
 
