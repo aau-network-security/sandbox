@@ -10,7 +10,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"strconv"
-	"strings"
 	"sync"
 
 	//"github.com/aau-network-security/sandbox2/models"
@@ -217,21 +216,20 @@ func (gc *SandConfig) StartSandbox(ctx context.Context, tag, name string, scenar
 	//if err := gc.env.initVPNInterface(gc.blueVPNIp, blueListenPort, wgNICblue, ethInterfaceName); err != nil {
 	//	return err
 	//}
+	//INIT SOC HERE
+	//macAddress := "04:d3:b0:9b:ea:d6"
+	//macAddressClean := strings.ReplaceAll(macAddress, ":", "")
+	//
+	//log.Debug().Str("sandbox", tag).Msg("Initalizing SoC")
+	//socPort := getRandomPort(smin, smax)
+	//ifaces := []string{fmt.Sprintf("%s_monitoring", tag), fmt.Sprintf("%s_AllBlue", tag)}
 
-	macAddress := "04:d3:b0:9b:ea:d6"
-	macAddressClean := strings.ReplaceAll(macAddress, ":", "")
-
-	log.Debug().Str("sandbox", tag).Msg("Initalizing SoC")
-	socPort := getRandomPort(smin, smax)
-	ifaces := []string{fmt.Sprintf("%s_monitoring", tag), fmt.Sprintf("%s_AllBlue", tag)}
-
-	//Todo: add also internet interface
 
 	//ifaces :=
-	if err := gc.env.initializeSOC(ctx, ifaces, macAddressClean, tag, 2, socPort); err != nil {
-		log.Error().Err(err).Str("sandbox", tag).Msg("starting SoC vm")
-		return err
-	}
+	//if err := gc.env.initializeSOC(ctx, ifaces, macAddressClean, tag, 2, socPort); err != nil {
+	//	log.Error().Err(err).Str("sandbox", tag).Msg("starting SoC vm")
+	//	return err
+	//}
 
 	log.Info().Str("Game Tag", tag).
 		Str("Game Name", name).
@@ -454,7 +452,8 @@ func (gc *SandConfig) CloseSandbox(ctx context.Context) error {
 //		}
 //
 //	}
-//
+//so
+//so
 //	return nil
 //}
 
@@ -500,9 +499,9 @@ func (env *environment) configureMonitor(ctx context.Context, bridge string, net
 func (env *environment) initializeSOC(ctx context.Context, networks []string, mac string, tag string, nic int, socPort uint) error {
 
 	vm, err := env.vlib.GetCopy(ctx, tag,
-		vbox.InstanceConfig{Image: "soc2022.ova",
-			CPU:      4,
-			MemoryMB: 32384},
+		vbox.InstanceConfig{Image: "socWorking.ova",
+			CPU:      2,
+			MemoryMB: 8096},
 		vbox.MapVMPort([]virtual.NatPortSettings{
 			{
 				HostPort:    strconv.FormatUint(uint64(socPort), 10),

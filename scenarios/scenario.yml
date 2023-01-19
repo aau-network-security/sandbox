@@ -13,39 +13,43 @@
 networks:
   - name: vlan10
     tag: 10
-  - name: vlan20
-    tag: 20
-  - name: vlan30
-    tag: 30
+#  - name: vlan20
+#    tag: 20
+#  - name: vlan30
+#    tag: 30
 hosts:
   - name: webserver
     type: docker
-    networks: [ "20" ]
+    networks: [ "10" ]
     image: "registry.gitlab.com/haaukins/forensics/hidden-server"
   - name: webserver
     type: docker
-    networks: [ "20" ]
+    networks: [ "10" ]
     image: "registry.gitlab.com/haaukins/forensics/hidden-server"
   - name: testserver
     type: vbox
-    networks: [ "10","20" ]
-    image: "csecMail.ova"
-  - name: mailserver
+    networks: [ "10" ]
+    image: "csecMail2.ova"
+  - name: testserver
     type: vbox
-    networks: [ "20" ]
-    image: mails.ova
-    DNS: "mail.myfinance.cu"
-    IPAddr: ".3"
+    networks: [ "10" ]
+    image: "csecMail2.ova"
+#  - name: mailserver
+#    type: vbox
+#    networks: [ "20" ]
+#    image: mails.ova
+#    DNS: "mail.myfinance.cu"
+#    IPAddr: ".3"
   #  - name: windowsMail
   #    type: vbox
   #    networks: ["20"]
   #    image: mails.ova
   #    DNS: "mail.myfinance.cu"
   #    IPAddr: ".3"
-  - name: DCcon
-    type: vbox
-    networks: [ "20", "30" ]
-    image: win10NoWDMail2.ova
-    DNS: "dc.myfinance.cu"
-    IPAddr: ".251"
+#  - name: DCcon
+#    type: vbox
+#    networks: [ "20", "30" ]
+#    image: win10NoWDMail2.ova
+#    DNS: "dc.myfinance.cu"
+#    IPAddr: ".251"
 
