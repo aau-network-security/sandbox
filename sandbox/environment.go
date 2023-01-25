@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/aau-network-security/openvswitch/ovs"
 	"github.com/aau-network-security/sandbox/config"
 	"github.com/aau-network-security/sandbox/controller"
+	"github.com/aau-network-security/sandbox/dnet/dns"
 	"github.com/aau-network-security/sandbox/models"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -21,16 +23,19 @@ import (
 )
 
 var (
-	redListenPort  uint = 5181
-	blueListenPort uint = 5182
-	min                 = 7900
-	max                 = 7950
-	gmin                = 5350
-	gmax                = 5375
-	smin                = 3000
-	smax                = 3500
-	rmin                = 5000
-	rmax                = 5300
+	//redListenPort  uint = 5181
+	//blueListenPort uint = 5182
+	//min                 = 7900
+	//max                 = 7950
+	mgmin = 10443
+	mgmax = 10553
+	//smin                = 3000
+	//smax                = 3500
+	rmin = 5000
+	rmax = 5300
+
+	//mngtPort unit= 10
+	//routerPort
 
 	ErrVMNotCreated       = errors.New("no VM created")
 	ErrGettingContainerID = errors.New("could not get container ID")
@@ -45,7 +50,7 @@ type environment struct {
 	instances  []virtual.Instance
 	ports      []string
 	vlib       vbox.Library
-	//dnsServer  *dns.Server
+	dnsServer  *dns.Server
 }
 
 type SandConfig struct {
@@ -95,12 +100,12 @@ func (gc *SandConfig) StartSandbox(ctx context.Context, tag, name string, scenar
 		return status.Errorf(codes.InvalidArgument, "No scenario exists with that ID - See valid ID using list command")
 	}
 
-	log.Info().Str("Game Tag", tag).
-		Str("Game Name", name).
+	log.Info().Str("Sandbox Tag", tag).
+		Str("Sandbox Name", name).
 		Str("Scenario", scenario.Name).
 		Msg("starting sandbox")
 
-	log.Debug().Str("Game", name).Str("bridgeName", tag).Msg("creating openvswitch bridge")
+	log.Debug().Str("Sandbox", name).Str("bridgeName", tag).Msg("creating openvswitch bridge")
 	if err := gc.env.initializeOVSBridge(tag); err != nil {
 		return err
 	}
@@ -117,28 +122,22 @@ func (gc *SandConfig) StartSandbox(ctx context.Context, tag, name string, scenar
 	vlanPorts = append(vlanPorts, fmt.Sprintf("%s_monitoring", tag))
 
 	log.Debug().Str("Game", name).Msg("configuring monitoring")
-	if err := gc.env.configureMonitor(ctx, tag, scenario.Networks); err != nil {
-		log.Error().Err(err).Msgf("configuring monitoring")
-		return err
-	}
-
-	//log.Debug().Str("Game", tag).Msgf("Initilizing VPN VM")
-
-	//assign connection port to RED users
-	//redTeamVPNPort := getRandomPort(min, max)
-
-	// assign grpc port to wg vms
-	//wgPort := getRandomPort(gmin, gmax)
-
-	//routerPort := getRandomPort(rmin, rmax)
-
-	//assign connection port to Blue users
-	//blueTeamVPNPort := getRandomPort(min, max)
-
-	//if err := gc.env.initWireguardVM(ctx, tag, vlanPorts, redTeamVPNPort, blueTeamVPNPort, wgPort, routerPort); err != nil {
-	//
+	//if err := gc.env.configureMonitor(ctx, tag, scenario.Networks); err != nil {
+	//	log.Error().Err(err).Msgf("configuring monitoring")
 	//	return err
 	//}
+
+	log.Debug().Str("Sandbox", tag).Msgf("Initilizing OpnSense VM")
+
+	//assign mgmt port to opnsense vm in 443 and 22
+	mngtPort := getRandomPort(mgmin, mgmax)
+
+	routerPort := getRandomPort(rmin, rmax)
+
+	if err := gc.env.initOpnSenseVM(ctx, tag, vlanPorts, mngtPort, routerPort); err != nil {
+		log.Error().Err(err).Msg("Problem booting OpnSense VM")
+		return err
+	}
 
 	//log.Debug().Str("Game", name).Msg("waiting for wireguard vm to boot")
 	//
@@ -157,12 +156,12 @@ func (gc *SandConfig) StartSandbox(ctx context.Context, tag, name string, scenar
 	//	return err
 	//}
 
-	//log.Debug().Str("Game  ", name).Msg("starting DNS server")
-	//
-	//if err := gc.env.initDNSServer(ctx, tag, gc.NetworksIP, scenario, ipMail, ipDC); err != nil {
-	//	log.Error().Err(err).Msg("connecting to DHCP service")
-	//	return err
-	//}
+	log.Debug().Str("Game  ", name).Msg("starting DNS server")
+
+	if err := gc.env.initDNSServer(ctx, tag); err != nil {
+		log.Error().Err(err).Msg("connecting to DHCP service")
+		return err
+	}
 
 	//wgClient, err := wg.NewGRPCVPNClient(ctx, gc.WgConfig, wgPort)
 	//if err != nil {
@@ -223,7 +222,6 @@ func (gc *SandConfig) StartSandbox(ctx context.Context, tag, name string, scenar
 	//log.Debug().Str("sandbox", tag).Msg("Initalizing SoC")
 	//socPort := getRandomPort(smin, smax)
 	//ifaces := []string{fmt.Sprintf("%s_monitoring", tag), fmt.Sprintf("%s_AllBlue", tag)}
-
 
 	//ifaces :=
 	//if err := gc.env.initializeSOC(ctx, ifaces, macAddressClean, tag, 2, socPort); err != nil {
@@ -369,7 +367,7 @@ func (gc *SandConfig) CloseSandbox(ctx context.Context) error {
 //			}
 //			staticHosts = append(staticHosts, &host)
 //		} else {
-//			fmt.Printf("Este in bucla cu Else. \n")
+//			fmt.Printf("Este in bucla cu Else. \n")e
 //			continue
 //		}
 //
@@ -394,68 +392,43 @@ func (gc *SandConfig) CloseSandbox(ctx context.Context) error {
 //	return ipList, nil, ipMail, ipDC
 //}
 
-//func (env *environment) initDNSServer(ctx context.Context, bridge string, ipList map[string]string, scenario store.Scenario, IPMail, IPdc string) error {
-//
-//	server, err := dns.New(bridge, ipList, scenario, IPMail, IPdc)
-//	if err != nil {
-//		log.Error().Msgf("Error creating DNS server %v", err)
-//		return err
-//	}
-//	env.dnsServer = server
-//	//env.instances = append(env.instances, server )
-//
-//	if err := server.Run(ctx); err != nil {
-//		log.Error().Msgf("Error in starting DNS  %v", err)
-//		return err
-//	}
-//
-//	contID := server.Container().ID()
-//	fmt.Printf("AICI e ID = %s\n", contID)
-//
-//	i := 1
-//	for _, network := range ipList {
-//
-//		if network == "10.10.10.0/24" {
-//
-//			ipAddrs := strings.TrimSuffix(network, ".0/24")
-//			ipAddrs = ipAddrs + ".2/24"
-//
-//			fmt.Println(ipAddrs)
-//
-//			if err := env.controller.Ovs.Docker.AddPort(bridge, fmt.Sprintf("eth%d", i), contID, ovs.DockerOptions{IPAddress: ipAddrs}); err != nil {
-//
-//				log.Error().Err(err).Str("container", contID).Msg("adding port to DNS container")
-//				return err
-//			}
-//			i++
-//			fmt.Println(i)
-//
-//		} else {
-//			ipAddrs := strings.TrimSuffix(network, ".0/24")
-//			ipAddrs = ipAddrs + ".2/24"
-//
-//			fmt.Println(ipAddrs)
-//			//fmt.Sprintf("eth%d", vlan)
-//			tag := i * 10
-//
-//			sTag := strconv.Itoa(tag)
-//
-//			fmt.Println(sTag)
-//			if err := env.controller.Ovs.Docker.AddPort(bridge, fmt.Sprintf("eth%d", i), contID, ovs.DockerOptions{VlanTag: sTag, IPAddress: ipAddrs}); err != nil {
-//
-//				log.Error().Err(err).Str("container", contID).Msg("adding port to DNS container")
-//				return err
-//			}
-//			i++
-//			fmt.Println(i)
-//
-//		}
-//
-//	}
-//so
-//so
-//	return nil
-//}
+func (env *environment) initDNSServer(ctx context.Context, bridge string) error {
+	//New(bridge, IPanswer string)
+	DNS, err := dns.New(ctx, bridge)
+	if err != nil {
+		log.Error().Msgf("Error creating DNS server %v", err)
+		return err
+	}
+
+	if DNS == nil {
+		return ErrVirtualInstanceNil
+	}
+
+	env.instances = append(env.instances, DNS)
+	//env.instances = append(env.instances, server )
+
+	if err := DNS.Run(ctx); err != nil {
+		log.Error().Msgf("Error in starting DNS  %v", err)
+		return err
+	}
+
+	contID := DNS.ID()
+	//HardCoded Mac Address Container
+	fmt.Printf("AICI e ID = %s\n", contID)
+
+	i := 1
+	macAddress := "8a:3d:ec:9c:b6:a5"
+
+	//sudo ovs-docker add-port test eth0 09 --vlan=10 --macaddress="8a:3d:ec:9c:b6:a5" --dhcp=true
+	//TODO: Check if you need a vlan for DNS server
+	if err := env.controller.Ovs.Docker.AddPort(bridge, fmt.Sprintf("eth%d", i), contID, ovs.DockerOptions{MACAddress: macAddress}); err != nil {
+
+		log.Error().Err(err).Str("container", contID).Msg("adding port to DNS container")
+		return err
+	}
+
+	return nil
+}
 
 //configureMonitor will configure the monitoring VM by attaching the correct interfaces
 func (env *environment) configureMonitor(ctx context.Context, bridge string, nets []models.Network) error {
@@ -476,7 +449,8 @@ func (env *environment) configureMonitor(ctx context.Context, bridge string, net
 	if err := env.createPort(bridge, "AllBlue", 0); err != nil {
 		return err
 	}
-
+	//TODO: Aici trebuie chestia aia cu TCPDUMP traffic
+	//		pentru portul unde e masina compromisa
 	portUUID, err := env.controller.Ovs.VSwitch.GetPortUUID(fmt.Sprintf("%s_AllBlue", bridge))
 	if err != nil {
 		log.Error().Err(err).Str("port", fmt.Sprintf("%s_AllBlue", bridge)).Msg("getting port uuid")
@@ -496,20 +470,20 @@ func (env *environment) configureMonitor(ctx context.Context, bridge string, net
 	return nil
 }
 
-func (env *environment) initializeSOC(ctx context.Context, networks []string, mac string, tag string, nic int, socPort uint) error {
+func (env *environment) initializeSOC(ctx context.Context, networks []string, mac string, tag string, nic int) error {
 
 	vm, err := env.vlib.GetCopy(ctx, tag,
 		vbox.InstanceConfig{Image: "socWorking.ova",
 			CPU:      2,
 			MemoryMB: 8096},
-		vbox.MapVMPort([]virtual.NatPortSettings{
-			{
-				HostPort:    strconv.FormatUint(uint64(socPort), 10),
-				GuestPort:   "22",
-				ServiceName: "sshd",
-				Protocol:    "tcp",
-			},
-		}),
+		//vbox.MapVMPort([]virtual.NatPortSettings{
+		//	{
+		//		HostPort:    strconv.FormatUint(uint64(socPort), 10),
+		//		GuestPort:   "22",
+		//		ServiceName: "sshd",
+		//		Protocol:    "tcp",
+		//	},
+		//}),
 		// SetBridge parameter cleanFirst should be enabled when wireguard/router instance
 		// is attaching to openvswitch network
 		vbox.SetBridge(networks, false),
@@ -534,154 +508,49 @@ func (env *environment) initializeSOC(ctx context.Context, networks []string, ma
 	return nil
 }
 
-//func (env *environment) initWireguardVM(ctx context.Context, tag string, vlanPorts []string, redTeamVPNport, blueTeamVPNport, wgPort uint, routerPort uint) error {
-//
-//	vm, err := env.vlib.GetCopy(ctx,
-//		tag,
-//		vbox.InstanceConfig{Image: "Routerfix.ova",
-//			CPU:      2,
-//			MemoryMB: 2048},
-//		vbox.MapVMPort([]virtual.NatPortSettings{
-//			{
-//				// this is for gRPC service
-//				HostPort:    strconv.FormatUint(uint64(wgPort), 10),
-//				GuestPort:   "5353",
-//				ServiceName: "wgservice",
-//				Protocol:    "tcp",
-//			},
-//			{
-//				HostPort:    strconv.FormatUint(uint64(redTeamVPNport), 10),
-//				GuestPort:   strconv.FormatUint(uint64(redListenPort), 10),
-//				ServiceName: "wgRedConnection",
-//				Protocol:    "udp",
-//			},
-//			{
-//				HostPort:    strconv.FormatUint(uint64(blueTeamVPNport), 10),
-//				GuestPort:   strconv.FormatUint(uint64(blueListenPort), 10),
-//				ServiceName: "wgBlueConnection",
-//				Protocol:    "udp",
-//			},
-//			{
-//				HostPort:    strconv.FormatUint(uint64(routerPort), 10),
-//				GuestPort:   "22",
-//				ServiceName: "sshd",
-//				Protocol:    "tcp",
-//			},
-//		}),
-//		// SetBridge parameter cleanFirst should be enabled when wireguard/router instance
-//		// is attaching to openvswitch network
-//		vbox.SetBridge(vlanPorts, false),
-//	)
-//
-//	if err != nil {
-//		log.Error().Err(err).Msg("creating VPN VM")
-//		return err
-//	}
-//	if vm == nil {
-//		return ErrVMNotCreated
-//	}
-//	log.Debug().Str("VM", vm.Info().Id).Msg("starting VM")
-//
-//	if err := vm.Start(ctx); err != nil {
-//		log.Error().Err(err).Msgf("starting virtual machine")
-//		return err
-//	}
-//	env.instances = append(env.instances, vm)
-//
-//	return nil
-//}
+func (env *environment) initOpnSenseVM(ctx context.Context, tag string, vlanPorts []string, mngtPort, routerPort uint) error {
 
-//func (gc *SandConfig) CreateVPNConfig(ctx context.Context, isRed bool, idUser string) (VPNConfig, error) {
-//
-//	var nicName string
-//
-//	var allowedIps []string
-//	var peerIP string
-//	var endpoint string
-//	//var dns string
-//	if isRed {
-//		//dns = ""
-//		nicName = fmt.Sprintf("%s_red", gc.Tag)
-//
-//		for key := range gc.NetworksIP {
-//			if gc.NetworksIP[key] == "10.10.10.0/24" {
-//				continue
-//			}
-//			allowedIps = append(allowedIps, gc.NetworksIP[key])
-//			break
-//		}
-//
-//		peerIP = gc.redVPNIp
-//		allowedIps = append(allowedIps, peerIP)
-//
-//		endpoint = fmt.Sprintf("%s.%s:%d", gc.Tag, gc.Host, gc.redPort)
-//	} else {
-//
-//		nicName = fmt.Sprintf("%s_blue", gc.Tag)
-//		for key := range gc.NetworksIP {
-//			allowedIps = append(allowedIps, gc.NetworksIP[key])
-//		}
-//
-//		peerIP = gc.blueVPNIp
-//		allowedIps = append(allowedIps, peerIP)
-//		endpoint = fmt.Sprintf("%s.%s:%d", gc.Tag, gc.Host, gc.bluePort)
-//	}
-//
-//	serverPubKey, err := gc.env.wg.GetPublicKey(ctx, &vpn.PubKeyReq{PubKeyName: nicName, PrivKeyName: nicName})
-//	if err != nil {
-//		log.Error().Err(err).Str("User", idUser).Msg("Err get public nicName wireguard")
-//		return VPNConfig{}, err
-//	}
-//
-//	_, err = gc.env.wg.GenPrivateKey(ctx, &vpn.PrivKeyReq{PrivateKeyName: gc.Tag + "_" + idUser + "_"})
-//	if err != nil {
-//		//fmt.Printf("Err gen private nicName wireguard  %v", err)
-//		log.Error().Err(err).Str("User", idUser).Msg("Err gen private nicName wireguard")
-//		return VPNConfig{}, err
-//	}
-//
-//	//generate client public nicName
-//	//log.Info().Msgf("Generating public nicName for team %s", evTag+"_"+team+"_"+strconv.Itoa(ipAddr))
-//	_, err = gc.env.wg.GenPublicKey(ctx, &vpn.PubKeyReq{PubKeyName: gc.Tag + "_" + idUser + "_", PrivKeyName: gc.Tag + "_" + idUser + "_"})
-//	if err != nil {
-//		log.Error().Err(err).Str("User", idUser).Msg("Err gen public nicName client")
-//		return VPNConfig{}, err
-//	}
-//
-//	clientPubKey, err := gc.env.wg.GetPublicKey(ctx, &vpn.PubKeyReq{PubKeyName: gc.Tag + "_" + idUser + "_"})
-//	if err != nil {
-//		fmt.Printf("Error on GetPublicKey %v", err)
-//		return VPNConfig{}, err
-//	}
-//
-//	pIP := fmt.Sprintf("%d/32", IPcounter())
-//
-//	peerIP = strings.Replace(peerIP, "0/24", pIP, 1)
-//
-//	_, err = gc.env.wg.AddPeer(ctx, &vpn.AddPReq{
-//		Nic:        nicName,
-//		AllowedIPs: peerIP,
-//		PublicKey:  clientPubKey.Message,
-//	})
-//
-//	if err != nil {
-//		log.Error().Err(err).Msg("Error on adding peer to interface")
-//		return VPNConfig{}, err
-//
-//	}
-//
-//	clientPrivKey, err := gc.env.wg.GetPrivateKey(ctx, &vpn.PrivKeyReq{PrivateKeyName: gc.Tag + "_" + idUser + "_"})
-//	if err != nil {
-//		log.Error().Err(err).Msg("getting priv NIC")
-//		return VPNConfig{}, err
-//	}
-//
-//	return VPNConfig{
-//		ServerPublicKey:  serverPubKey.Message,
-//		PrivateKeyClient: clientPrivKey.Message,
-//		Endpoint:         endpoint,
-//		AllowedIPs:       strings.Join(allowedIps, ", "),
-//		PeerIP:           peerIP,
-//	}, nil
-//
-//}
+	vm, err := env.vlib.GetCopy(ctx,
+		tag,
+		vbox.InstanceConfig{Image: "opnsense.ova",
+			CPU:      2,
+			MemoryMB: 2048},
+		vbox.MapVMPort([]virtual.NatPortSettings{
+			{
+				// this is for management opnSense port
+				HostPort:    strconv.FormatUint(uint64(mngtPort), 10),
+				GuestPort:   "443",
+				ServiceName: "mngtPort",
+				Protocol:    "tcp",
+			},
+			{
+				HostPort:    strconv.FormatUint(uint64(routerPort), 10),
+				GuestPort:   "22",
+				ServiceName: "sshd",
+				Protocol:    "tcp",
+			},
+		}),
+		// SetBridge parameter cleanFirst should be enabled when wireguard/router instance
+		// is attaching to openvswitch network
+		vbox.SetBridge(vlanPorts, false),
+	)
+
+	if err != nil {
+		log.Error().Err(err).Msg("creating OpnSense VM")
+		return err
+	}
+	if vm == nil {
+		fmt.Println("Banuiesc ca aici e o problema :)")
+		log.Debug().Str("VM", vm.Info().Id).Msg("starting VM")
+		return ErrVMNotCreated
+	}
+	//log.Debug().Str("VM", vm.Info().Id).Msg("starting VM")
+
+	if err := vm.Start(ctx); err != nil {
+		log.Error().Err(err).Msgf("starting virtual machine")
+		return err
+	}
+	env.instances = append(env.instances, vm)
+
+	return nil
+}
