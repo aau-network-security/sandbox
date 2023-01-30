@@ -16,6 +16,8 @@ type Host struct {
 	DNS string `yaml:"DNS"`
 	// IPAddr should only be included for vboxes which has specific requirements for the host
 	IPAddr string `yaml:"IPAddr"`
+	// IPAddr should only be included for vboxes which has specific requirements for the host
+	MacAddr string `yaml:"MacAddr"`
 	// Resources should only be included for vboxes which has specific requirements for the host
 	Resources Recources `yaml:"resources"`
 }

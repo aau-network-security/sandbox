@@ -289,7 +289,7 @@ func enableProsmiscMode(ctx context.Context, vmID string, nic int) error {
 func MapVMPort(portMapping []virtual.NatPortSettings) VMOpt {
 	return func(ctx context.Context, vm *vm) error {
 		for _, p := range portMapping {
-			_, err := VBoxCmdContext(ctx, vboxModVM, vm.id, "--natpf1", fmt.Sprintf("%s,%s,,%s,,%s", p.ServiceName, p.Protocol, p.HostPort, p.GuestPort))
+			_, err := VBoxCmdContext(ctx, vboxModVM, vm.id, "--natpf2", fmt.Sprintf("%s,%s,,%s,,%s", p.ServiceName, p.Protocol, p.HostPort, p.GuestPort))
 			if err != nil {
 				return err
 			}

@@ -13,32 +13,55 @@
 networks:
   - name: vlan10
     tag: 10
-#  - name: vlan20
-#    tag: 20
-#  - name: vlan30
-#    tag: 30
+  - name: vlan20
+    tag: 20
+  - name: vlan30
+    tag: 30
+#  - name: DMZ
+#    tag: 40
 hosts:
+  - name: dummyweb
+    type: docker
+    image: "docker.io/rasmim/dummypage"
+    MacAddr: "8a:c3:a4:3f:d3:d2"
   - name: webserver
     type: docker
     networks: [ "10" ]
     image: "registry.gitlab.com/haaukins/forensics/hidden-server"
   - name: webserver
     type: docker
-    networks: [ "10" ]
+    networks: [ "20" ]
     image: "registry.gitlab.com/haaukins/forensics/hidden-server"
+  - name: webserver
+    type: docker
+    networks: [ "30" ]
+    image: "registry.gitlab.com/haaukins/forensics/hidden-server"
+  - name: webserver
+    type: docker
+    networks: [ "20" ]
+    image: "registry.gitlab.com/haaukins/forensics/hidden-server"
+
   - name: testserver
     type: vbox
     networks: [ "10" ]
     image: "csecMail2.ova"
   - name: testserver
     type: vbox
+    networks: [ "20" ]
+    image: "csecMail2.ova"
+  - name: testserver
+    type: vbox
+    networks: [ "30" ]
+    image: "csecMail2.ova"
+  - name: testserver
+    type: vbox
     networks: [ "10" ]
     image: "csecMail2.ova"
-#  - name: mailserver
-#    type: vbox
-#    networks: [ "20" ]
-#    image: mails.ova
-#    DNS: "mail.myfinance.cu"
+  #  - name: mailserver
+  #    type: vbox
+  #    networks: [ "20" ]
+  #    image: mails.ova
+  #    DNS: "mail.myfinance.cu"
 #    IPAddr: ".3"
   #  - name: windowsMail
   #    type: vbox

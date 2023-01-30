@@ -29,7 +29,7 @@ type Server struct {
 func New(ctx context.Context, bridge string) (*Server, error) {
 
 	container := docker.NewContainer(docker.ContainerConfig{
-		Image: "docker.io/aaunetworksecurity/fakedns",
+		Image: "docker.io/rasmim/fakedns",
 		Labels: map[string]string{
 			"nap-sandbox": bridge,
 		},

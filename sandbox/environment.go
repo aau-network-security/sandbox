@@ -13,6 +13,7 @@ import (
 	"google.golang.org/grpc/status"
 	"strconv"
 	"sync"
+	"time"
 
 	//"github.com/aau-network-security/sandbox2/models"
 	"github.com/aau-network-security/sandbox/store"
@@ -23,19 +24,11 @@ import (
 )
 
 var (
-	//redListenPort  uint = 5181
-	//blueListenPort uint = 5182
-	//min                 = 7900
-	//max                 = 7950
 	mgmin = 10443
 	mgmax = 10553
-	//smin                = 3000
-	//smax                = 3500
+
 	rmin = 5000
 	rmax = 5300
-
-	//mngtPort unit= 10
-	//routerPort
 
 	ErrVMNotCreated       = errors.New("no VM created")
 	ErrGettingContainerID = errors.New("could not get container ID")
@@ -44,8 +37,6 @@ var (
 type environment struct {
 	// challenge microservice should be integrated heres
 	controller controller.NetController
-	//wg         vpn.WireguardClient
-	//dhcp       dhproto.DHCPClient
 	dockerHost docker.Host
 	instances  []virtual.Instance
 	ports      []string
@@ -54,24 +45,10 @@ type environment struct {
 }
 
 type SandConfig struct {
-	//ID       string
-	Name string
-	Tag  string
-	//WgConfig      wg.WireGuardConfig
-	//Host       string
+	Name   string
+	Tag    string
 	env    *environment
 	Config *config.Config
-
-	//NetworksIP map[string]string
-	//NetworksNO int
-
-	//redVPNIp      string
-	//blueVPNIp     string
-	//redPort       uint
-	//bluePort      uint
-	//CreatedAt     time.Time
-	//RedPanicLeft  uint
-	//BluePanicLeft uint
 }
 
 func NewSandbox(sandconf *SandConfig) (*SandConfig, error) {
@@ -115,17 +92,17 @@ func (gc *SandConfig) StartSandbox(ctx context.Context, tag, name string, scenar
 		return err
 	}
 
+	log.Debug().Str("Game", name).Msg("configuring monitoring")
+	if err := gc.env.configureMonitor(ctx, tag, scenario.Networks); err != nil {
+		log.Error().Err(err).Msgf("configuring monitoring")
+		return err
+	}
+
 	var vlanPorts []string
 	for _, network := range scenario.Networks {
 		vlanPorts = append(vlanPorts, fmt.Sprintf("%s_%s", tag, network.Name))
 	}
 	vlanPorts = append(vlanPorts, fmt.Sprintf("%s_monitoring", tag))
-
-	log.Debug().Str("Game", name).Msg("configuring monitoring")
-	//if err := gc.env.configureMonitor(ctx, tag, scenario.Networks); err != nil {
-	//	log.Error().Err(err).Msgf("configuring monitoring")
-	//	return err
-	//}
 
 	log.Debug().Str("Sandbox", tag).Msgf("Initilizing OpnSense VM")
 
@@ -139,95 +116,24 @@ func (gc *SandConfig) StartSandbox(ctx context.Context, tag, name string, scenar
 		return err
 	}
 
-	//log.Debug().Str("Game", name).Msg("waiting for wireguard vm to boot")
-	//
-	//dhcpClient, err := dhcp.NewDHCPClient(ctx, gc.WgConfig, wgPort)
-	//if err != nil {
-	//	log.Error().Err(err).Msg("connecting to DHCP service")
-	//	return err
-	//}
-	//
-	//gc.env.dhcp = dhcpClient
-
-	//log.Debug().Str("Game  ", name).Msg("starting DHCP server")
-
-	//gc.NetworksIP, err, ipMail, ipDC = gc.env.initDHCPServer(ctx, len(scenario.Networks), scenario)
-	//if err != nil {
-	//	return err
-	//}
-
 	log.Debug().Str("Game  ", name).Msg("starting DNS server")
 
 	if err := gc.env.initDNSServer(ctx, tag); err != nil {
-		log.Error().Err(err).Msg("connecting to DHCP service")
+		log.Error().Err(err).Msg("attaching the DNS")
 		return err
 	}
-
-	//wgClient, err := wg.NewGRPCVPNClient(ctx, gc.WgConfig, wgPort)
-	//if err != nil {
-	//	log.Error().Err(err).Msg("connecting to wireguard service")
-	//	return err
-	//}
-	//gc.env.wg = wgClient
 
 	log.Debug().Str("Game", name).Msg("initializing scenario")
 	if err := gc.env.initializeScenario(ctx, tag, scenario); err != nil {
 		return err
 	}
 
-	//ethInterfaceName := "eth0" // can be customized later
+	//TODO: Create FTP here!!!
 
-	//redTeamVPNIp, err := gc.env.getRandomIp()
-	//if err != nil {
-	//	log.Error().Err(err).Msg("Problem in generating red team VPNip")
-	//	return err
-	//}
-	////
-	//gc.redVPNIp = fmt.Sprintf("%s.0/24", redTeamVPNIp)
-	////Assigning a connection port for Red team
-	//
-	//gc.redPort = redTeamVPNPort
-
-	// create wireguard interface for red team
-	//wgNICred := fmt.Sprintf("%s_red", tag)
-
-	// initializing VPN endpoint for red team
-	//if err := gc.env.initVPNInterface(gc.redVPNIp, redListenPort, wgNICred, ethInterfaceName); err != nil {
-	//	return err
-	//}
-	//
-	//blueTeamVPNIp, err := gc.env.getRandomIp()
-	//if err != nil {
-	//	log.Error().Err(err).Msg("")
-	//	return err
-	//}
-	//
-	//gc.blueVPNIp = fmt.Sprintf("%s.0/24", blueTeamVPNIp)
-	//
-	////Assigning a connection port for blue team
-	//
-	//gc.bluePort = blueTeamVPNPort
-	// initializing VPN endpoint for blue team
-
-	//create wireguard interface for blue team
-	//wgNICblue := fmt.Sprintf("%s_blue", tag)
-
-	//if err := gc.env.initVPNInterface(gc.blueVPNIp, blueListenPort, wgNICblue, ethInterfaceName); err != nil {
-	//	return err
-	//}
-	//INIT SOC HERE
-	//macAddress := "04:d3:b0:9b:ea:d6"
-	//macAddressClean := strings.ReplaceAll(macAddress, ":", "")
-	//
-	//log.Debug().Str("sandbox", tag).Msg("Initalizing SoC")
-	//socPort := getRandomPort(smin, smax)
-	//ifaces := []string{fmt.Sprintf("%s_monitoring", tag), fmt.Sprintf("%s_AllBlue", tag)}
-
-	//ifaces :=
-	//if err := gc.env.initializeSOC(ctx, ifaces, macAddressClean, tag, 2, socPort); err != nil {
-	//	log.Error().Err(err).Str("sandbox", tag).Msg("starting SoC vm")
-	//	return err
-	//}
+	if err := gc.env.addTargetVM(ctx, tag); err != nil {
+		log.Error().Err(err).Msg("Problem booting OpnSense VM")
+		return err
+	}
 
 	log.Info().Str("Game Tag", tag).
 		Str("Game Name", name).
@@ -276,124 +182,9 @@ func (gc *SandConfig) CloseSandbox(ctx context.Context) error {
 	return nil
 }
 
-//func (env *environment) initVPNInterface(ipAddress string, port uint, vpnInterfaceName, ethInterface string) error {
-//
-//	// ipAddress should be in this format : "45.11.23.1/24"
-//	// port should be unique per interface
-//
-//	_, err := env.wg.InitializeI(context.Background(), &vpn.IReq{
-//		Address:            ipAddress,
-//		ListenPort:         uint32(port),
-//		SaveConfig:         true,
-//		Eth:                ethInterface,
-//		IName:              vpnInterfaceName,
-//		DownInterfacesFile: "/etc/network/downinterfaces",
-//	})
-//	if err != nil {
-//		log.Error().Msgf("Error in initializing interface %v", err)
-//		return err
-//	}
-//	return nil
-//}
-
-//func (env *environment) initDHCPServer(ctx context.Context, numberNetworks int, scenario store.Scenario) (map[string]string, error, string, string) {
-//	var networks []*dhproto.Network
-//	var staticHosts []*dhproto.StaticHost
-//	var ipMail, ipDC string
-//
-//	ipList := make(map[string]string)
-//
-//	for i := 1; i <= numberNetworks; i++ {
-//		var network dhproto.Network
-//		randIP, _ := env.controller.IPPool.Get()
-//		network.Network = randIP + ".0"
-//		network.Min = randIP + ".6"
-//		network.Max = randIP + ".250"
-//		network.Router = randIP + ".1"
-//
-//		ipList[fmt.Sprintf("%d", 10*i)] = randIP + ".0/24"
-//		network.DnsServer = randIP + ".2"
-//		networks = append(networks, &network)
-//
-//	}
-//
-//	// Setup monitoring network
-//
-//	monitoringNet := dhproto.Network{
-//		Network:   "10.10.10.0",
-//		Min:       "10.10.10.6",
-//		Max:       "10.10.10.199",
-//		Router:    "10.10.10.1",
-//		DnsServer: "10.10.10.2",
-//	}
-//	ipList[""] = "10.10.10.0/24"
-//
-//	networks = append(networks, &monitoringNet)
-//	//Todo: This is scenario based method to make it work
-//	// in future this needs to be scenario indenpent
-//
-//	for _, item := range scenario.Hosts {
-//
-//		//cast la string acum e lista de stringuri
-//		if item.Name == "mailserver" {
-//
-//			ipMail = ConstructStaticIP(ipList, item.Networks, item.IPAddr)
-//			host := dhproto.StaticHost{
-//				Name: item.Name,
-//
-//				MacAddress: "04:d3:04:54:fe:15",
-//				Address:    ipMail,
-//				Router:     ConstructStaticIP(ipList, item.Networks, ".1"),
-//				DomainName: fmt.Sprintf("\"%s\"", item.DNS),
-//				DnsServer:  ConstructStaticIP(ipList, item.Networks, ".2"),
-//			}
-//
-//			staticHosts = append(staticHosts, &host)
-//			continue
-//
-//		} else if item.Name == "DCcon" {
-//			fmt.Printf("Este in bucla cu DCcon \n")
-//
-//			ipDC = ConstructStaticIP(ipList, item.Networks, item.IPAddr)
-//			fmt.Printf("DCcon IP: %s\n", ipDC)
-//
-//			host := dhproto.StaticHost{
-//				Name:       item.Name,
-//				MacAddress: "04:d3:b0:c7:57:c7",
-//				Address:    ipDC,
-//				Router:     ConstructStaticIP(ipList, item.Networks, ".1"),
-//				DomainName: fmt.Sprintf("\"%s\"", item.DNS),
-//				DnsServer:  ConstructStaticIP(ipList, item.Networks, ".2"),
-//			}
-//			staticHosts = append(staticHosts, &host)
-//		} else {
-//			fmt.Printf("Este in bucla cu Else. \n")e
-//			continue
-//		}
-//
-//	}
-//
-//	host := dhproto.StaticHost{
-//		Name:       "SOC",
-//		MacAddress: "04:d3:b0:9b:ea:d6",
-//		Address:    "10.10.10.200",
-//		Router:     "10.10.10.1",
-//		DomainName: "\"blue.monitor.soc\"",
-//		DnsServer:  "10.10.10.2",
-//	}
-//
-//	staticHosts = append(staticHosts, &host)
-//
-//	_, err := env.dhcp.StartDHCP(ctx, &dhproto.StartReq{Networks: networks, StaticHosts: staticHosts})
-//	if err != nil {
-//		return ipList, err, ipMail, ipDC
-//	}
-//
-//	return ipList, nil, ipMail, ipDC
-//}
-
 func (env *environment) initDNSServer(ctx context.Context, bridge string) error {
 	//New(bridge, IPanswer string)
+	//defer wg.Done()
 	DNS, err := dns.New(ctx, bridge)
 	if err != nil {
 		log.Error().Msgf("Error creating DNS server %v", err)
@@ -417,11 +208,12 @@ func (env *environment) initDNSServer(ctx context.Context, bridge string) error 
 	fmt.Printf("AICI e ID = %s\n", contID)
 
 	i := 1
+
 	macAddress := "8a:3d:ec:9c:b6:a5"
 
 	//sudo ovs-docker add-port test eth0 09 --vlan=10 --macaddress="8a:3d:ec:9c:b6:a5" --dhcp=true
 	//TODO: Check if you need a vlan for DNS server
-	if err := env.controller.Ovs.Docker.AddPort(bridge, fmt.Sprintf("eth%d", i), contID, ovs.DockerOptions{MACAddress: macAddress}); err != nil {
+	if err := env.controller.Ovs.Docker.AddPort(bridge, fmt.Sprintf("eth%d", i), contID, ovs.DockerOptions{MACAddress: macAddress, DHCP: true}); err != nil {
 
 		log.Error().Err(err).Str("container", contID).Msg("adding port to DNS container")
 		return err
@@ -438,34 +230,85 @@ func (env *environment) configureMonitor(ctx context.Context, bridge string, net
 		return err
 	}
 
-	mirror := fmt.Sprintf("%s_mirror", bridge)
+	//TODO: Create mirror for each VLAN
+	//		Change the mirror AllBlue to VLAN specific
+	//mirror := fmt.Sprintf("%s_mirror", bridge)
+	//
+	//log.Info().Str("sandbox tag", bridge).Msg("Creating the network mirror")
+	//if err := env.controller.Ovs.VSwitch.CreateMirrorforBridge(mirror, bridge); err != nil {
+	//	log.Error().Err(err).Msg("creating mirror")
+	//	return err
+	//}
+	//
+	//if err := env.createPort(bridge, "AllBlue", 0); err != nil {
+	//	return err
+	//}
+	//
+	//portUUID, err := env.controller.Ovs.VSwitch.GetPortUUID(fmt.Sprintf("%s_AllBlue", bridge))
+	//if err != nil {
+	//	log.Error().Err(err).Str("port", fmt.Sprintf("%s_AllBlue", bridge)).Msg("getting port uuid")
+	//	return err
+	//}
+	//
+	//var vlans []string
+	//for _, network := range nets {
+	//	vlans = append(vlans, fmt.Sprint(network.Tag))
+	//}
+	//
+	//if err := env.controller.Ovs.VSwitch.MirrorAllVlans(mirror, portUUID, vlans); err != nil {
+	//	log.Error().Err(err).Msgf("mirroring traffic")
+	//	return err
+	//}
+	//
+	return nil
+}
 
-	log.Info().Str("sandbox tag", bridge).Msg("Creating the network mirror")
-	if err := env.controller.Ovs.VSwitch.CreateMirrorforBridge(mirror, bridge); err != nil {
+func (env *environment) addTargetVM(ctx context.Context, bridge string) error {
+
+	var special []string
+
+	log.Info().Str("sandbox tag", bridge).Msg("creating special interface")
+	if err := env.createPort(bridge, "special", 10); err != nil {
 		log.Error().Err(err).Msg("creating mirror")
+
 		return err
 	}
 
-	if err := env.createPort(bridge, "AllBlue", 0); err != nil {
-		return err
-	}
 	//TODO: Aici trebuie chestia aia cu TCPDUMP traffic
 	//		pentru portul unde e masina compromisa
-	portUUID, err := env.controller.Ovs.VSwitch.GetPortUUID(fmt.Sprintf("%s_AllBlue", bridge))
+
+	dt := time.Now()
+	//dt.Format("01022006_150405_Mon")
+	targetIntf := fmt.Sprintf("%s_special", bridge)
+
+	if err := env.controller.TCPdump.DumpTraffic(targetIntf, fmt.Sprintf("special_%s", dt.Format("01022006_150405_Mon"))); err != nil {
+		log.Error().Err(err).Str("interface: ", targetIntf).Msg("problem starting tcpdump")
+		return err
+	}
+
+	special = append(special, targetIntf)
+
+	vm, err := env.vlib.GetCopy(ctx, bridge,
+		vbox.InstanceConfig{Image: "pain3.ova",
+			CPU:      2,
+			MemoryMB: 4500},
+		vbox.SetBridge(special, false),
+	)
+
 	if err != nil {
-		log.Error().Err(err).Str("port", fmt.Sprintf("%s_AllBlue", bridge)).Msg("getting port uuid")
+		log.Error().Err(err).Msg("creating copy of SoC VM")
 		return err
 	}
-
-	var vlans []string
-	for _, network := range nets {
-		vlans = append(vlans, fmt.Sprint(network.Tag))
+	if vm == nil {
+		return ErrVMNotCreated
 	}
+	log.Debug().Str("VM", vm.Info().Id).Msg("starting VM")
 
-	if err := env.controller.Ovs.VSwitch.MirrorAllVlans(mirror, portUUID, vlans); err != nil {
-		log.Error().Err(err).Msgf("mirroring traffic")
+	if err := vm.Start(ctx); err != nil {
+		log.Error().Err(err).Msgf("starting virtual machine")
 		return err
 	}
+	env.instances = append(env.instances, vm)
 
 	return nil
 }
@@ -512,7 +355,7 @@ func (env *environment) initOpnSenseVM(ctx context.Context, tag string, vlanPort
 
 	vm, err := env.vlib.GetCopy(ctx,
 		tag,
-		vbox.InstanceConfig{Image: "opnsense.ova",
+		vbox.InstanceConfig{Image: "opnsenseF.ova",
 			CPU:      2,
 			MemoryMB: 2048},
 		vbox.MapVMPort([]virtual.NatPortSettings{
