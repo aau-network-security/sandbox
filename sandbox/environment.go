@@ -92,12 +92,6 @@ func (gc *SandConfig) StartSandbox(ctx context.Context, tag, name string, scenar
 		return err
 	}
 
-	log.Debug().Str("Game", name).Msg("configuring monitoring")
-	if err := gc.env.configureMonitor(ctx, tag, scenario.Networks); err != nil {
-		log.Error().Err(err).Msgf("configuring monitoring")
-		return err
-	}
-
 	var vlanPorts []string
 	for _, network := range scenario.Networks {
 		vlanPorts = append(vlanPorts, fmt.Sprintf("%s_%s", tag, network.Name))
@@ -111,6 +105,12 @@ func (gc *SandConfig) StartSandbox(ctx context.Context, tag, name string, scenar
 
 	routerPort := getRandomPort(rmin, rmax)
 
+	log.Debug().Str("Game", name).Msg("configuring monitoring")
+	if err := gc.env.configureMonitor(ctx, tag, scenario.Networks); err != nil {
+		log.Error().Err(err).Msgf("configuring monitoring")
+		return err
+	}
+
 	if err := gc.env.initOpnSenseVM(ctx, tag, vlanPorts, mngtPort, routerPort); err != nil {
 		log.Error().Err(err).Msg("Problem booting OpnSense VM")
 		return err
@@ -123,6 +123,12 @@ func (gc *SandConfig) StartSandbox(ctx context.Context, tag, name string, scenar
 		return err
 	}
 
+	//initFTPMalws
+	if err := gc.env.initFTPMalws(ctx, tag); err != nil {
+		log.Error().Err(err).Msg("Problem booting targetWin VM")
+		return err
+	}
+
 	log.Debug().Str("Game", name).Msg("initializing scenario")
 	if err := gc.env.initializeScenario(ctx, tag, scenario); err != nil {
 		return err
@@ -131,7 +137,7 @@ func (gc *SandConfig) StartSandbox(ctx context.Context, tag, name string, scenar
 	//TODO: Create FTP here!!!
 
 	if err := gc.env.addTargetVM(ctx, tag); err != nil {
-		log.Error().Err(err).Msg("Problem booting OpnSense VM")
+		log.Error().Err(err).Msg("Problem booting targetWin VM")
 		return err
 	}
 
@@ -210,14 +216,65 @@ func (env *environment) initDNSServer(ctx context.Context, bridge string) error 
 	i := 1
 
 	macAddress := "8a:3d:ec:9c:b6:a5"
-
+	vlantag := "0"
 	//sudo ovs-docker add-port test eth0 09 --vlan=10 --macaddress="8a:3d:ec:9c:b6:a5" --dhcp=true
 	//TODO: Check if you need a vlan for DNS server
-	if err := env.controller.Ovs.Docker.AddPort(bridge, fmt.Sprintf("eth%d", i), contID, ovs.DockerOptions{MACAddress: macAddress, DHCP: true}); err != nil {
+	if err := env.controller.Ovs.Docker.AddPort(bridge, fmt.Sprintf("eth%d", i), contID, ovs.DockerOptions{MACAddress: macAddress, VlanTag: vlantag, DHCP: true}); err != nil {
 
 		log.Error().Err(err).Str("container", contID).Msg("adding port to DNS container")
 		return err
 	}
+
+	return nil
+}
+
+func (env *environment) initFTPMalws(ctx context.Context, bridge string) error {
+	//New(bridge, IPanswer string)
+	//defer wg.Done()
+	//Todo: asta nu merge !! FMMMSIII
+	//var string malwarePath
+	malwarePath := "/home/rvm/sandbox/bad/upload"
+	ftp := docker.NewContainer(docker.ContainerConfig{
+		Image: "atmoz/sftp",
+		Mounts: []string{
+			fmt.Sprintf("%s:/home/foo/upload", malwarePath),
+			//fmt.Sprintf("",dir ),
+		},
+		Labels: map[string]string{
+			"nap-sandbox": bridge,
+			//"sandbox-networks": strings.Join(nets, ","),
+
+		},
+		Cmd: []string{"foo:pass:1001"},
+	})
+
+	if err := ftp.Create(ctx); err != nil {
+		log.Error().Err(err).Msg("creating container")
+		return err
+	}
+
+	if err := ftp.Start(ctx); err != nil {
+		log.Error().Err(err).Msg("starting container")
+		return err
+	}
+
+	cid := ftp.ID()
+	if cid == "" {
+		log.Error().Msg("getting ID for container")
+		return ErrGettingContainerID
+	}
+
+	vlantag := "40"
+	if err := env.controller.Ovs.Docker.AddPort(bridge, "eth0", cid, ovs.DockerOptions{MACAddress: "8a:3d:af:44:1b:f7", VlanTag: vlantag, DHCP: true}); err != nil {
+		log.Error().Err(err).Str("container", cid).Msg("adding port to container")
+		return err
+	}
+
+	if ftp == nil {
+		return ErrVirtualInstanceNil
+	}
+
+	env.instances = append(env.instances, ftp)
 
 	return nil
 }
@@ -278,13 +335,20 @@ func (env *environment) addTargetVM(ctx context.Context, bridge string) error {
 	//		pentru portul unde e masina compromisa
 
 	dt := time.Now()
-	//dt.Format("01022006_150405_Mon")
+	dt.Format("01022006_150405_Mon")
 	targetIntf := fmt.Sprintf("%s_special", bridge)
+	log.Debug().Msg("ACUM urmeaza functia problema ")
+	go func() {
+		if err := env.controller.TCPdump.DumpTraffic(targetIntf, fmt.Sprintf("special_%s", dt.Format("01022006_150405_Mon"))); err != nil {
+			log.Error().Err(err).Str("interface: ", targetIntf).Msg("problem starting tcpdump")
 
-	if err := env.controller.TCPdump.DumpTraffic(targetIntf, fmt.Sprintf("special_%s", dt.Format("01022006_150405_Mon"))); err != nil {
-		log.Error().Err(err).Str("interface: ", targetIntf).Msg("problem starting tcpdump")
-		return err
-	}
+		}
+	}()
+
+	fmt.Println("este blocat aici sau doar dureaza mai mult?")
+	log.Debug().Msg("Oare chiar ramane blocat aici ")
+	////TODO: Vezi de ce moare
+	///AICI MOARE, DE CE MORI ?? DE CE NU MERGI MAI DEPARTE?? DE CE??
 
 	special = append(special, targetIntf)
 
@@ -292,7 +356,8 @@ func (env *environment) addTargetVM(ctx context.Context, bridge string) error {
 		vbox.InstanceConfig{Image: "pain3.ova",
 			CPU:      2,
 			MemoryMB: 4500},
-		vbox.SetBridge(special, false),
+		vbox.SetBridge(special, true),
+		vbox.SetMAC("6CF0491A6E12", 1),
 	)
 
 	if err != nil {
@@ -330,7 +395,7 @@ func (env *environment) initializeSOC(ctx context.Context, networks []string, ma
 		// SetBridge parameter cleanFirst should be enabled when wireguard/router instance
 		// is attaching to openvswitch network
 		vbox.SetBridge(networks, false),
-		vbox.SetMAC(mac, nic),
+		vbox.SetMAC("04D3B09BEAD6", nic),
 	)
 
 	if err != nil {
@@ -355,15 +420,15 @@ func (env *environment) initOpnSenseVM(ctx context.Context, tag string, vlanPort
 
 	vm, err := env.vlib.GetCopy(ctx,
 		tag,
-		vbox.InstanceConfig{Image: "opnsenseF.ova",
-			CPU:      2,
-			MemoryMB: 2048},
+		vbox.InstanceConfig{Image: "opnfuck.ova",
+			CPU:      1,
+			MemoryMB: 1600},
 		vbox.MapVMPort([]virtual.NatPortSettings{
 			{
 				// this is for management opnSense port
 				HostPort:    strconv.FormatUint(uint64(mngtPort), 10),
 				GuestPort:   "443",
-				ServiceName: "mngtPort",
+				ServiceName: "mngtP",
 				Protocol:    "tcp",
 			},
 			{

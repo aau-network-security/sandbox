@@ -16,6 +16,7 @@ while getopts "b:" arg; do
   esac
 done
 
+sudo kill $(ps -e | pgrep tcpdump);
 
 sudo ovs-vsctl del-br $bridge
 sudo ip link del ${bridge}_vlan10
