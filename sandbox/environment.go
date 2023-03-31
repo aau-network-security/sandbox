@@ -8,7 +8,6 @@ import (
 	"github.com/aau-network-security/sandbox/config"
 	"github.com/aau-network-security/sandbox/controller"
 	"github.com/aau-network-security/sandbox/dnet/dns"
-	"github.com/aau-network-security/sandbox/models"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"strconv"
@@ -30,6 +29,8 @@ var (
 	rmin = 5000
 	rmax = 5300
 
+	KibMin                = 7779
+	KibMax                = 7795
 	ErrVMNotCreated       = errors.New("no VM created")
 	ErrGettingContainerID = errors.New("could not get container ID")
 )
@@ -106,8 +107,8 @@ func (gc *SandConfig) StartSandbox(ctx context.Context, tag, name string, scenar
 	routerPort := getRandomPort(rmin, rmax)
 
 	log.Debug().Str("Game", name).Msg("configuring monitoring")
-	if err := gc.env.configureMonitor(ctx, tag, scenario.Networks); err != nil {
-		log.Error().Err(err).Msgf("configuring monitoring")
+	log.Info().Str("sandbox tag", tag).Msg("creating monitoring network")
+	if err := gc.env.createPort(tag, "monitoring", 0); err != nil {
 		return err
 	}
 
@@ -115,7 +116,7 @@ func (gc *SandConfig) StartSandbox(ctx context.Context, tag, name string, scenar
 		log.Error().Err(err).Msg("Problem booting OpnSense VM")
 		return err
 	}
-
+	time.Sleep(10 * time.Second)
 	log.Debug().Str("Game  ", name).Msg("starting DNS server")
 
 	if err := gc.env.initDNSServer(ctx, tag); err != nil {
@@ -128,18 +129,26 @@ func (gc *SandConfig) StartSandbox(ctx context.Context, tag, name string, scenar
 		log.Error().Err(err).Msg("Problem booting targetWin VM")
 		return err
 	}
+	if err := gc.env.addTargetVM(ctx, tag); err != nil {
+		log.Error().Err(err).Msg("Problem booting targetWin VM")
+		return err
+	}
 
 	log.Debug().Str("Game", name).Msg("initializing scenario")
 	if err := gc.env.initializeScenario(ctx, tag, scenario); err != nil {
 		return err
 	}
 
-	//TODO: Create FTP here!!!
-
-	if err := gc.env.addTargetVM(ctx, tag); err != nil {
-		log.Error().Err(err).Msg("Problem booting targetWin VM")
-		return err
-	}
+	//
+	//socPort := getRandomPort(KibMin, KibMax)
+	//
+	//log.Debug().Str("game", tag).Msg("Initalizing SoC")
+	//
+	//ifaces := []string{fmt.Sprintf("%s_monitoring", tag)}
+	//if err := gc.env.initializeSOC(ctx, ifaces, tag, 2, socPort); err != nil {
+	//	log.Error().Err(err).Str("game", tag).Msg("starting SoC vm")
+	//	return err
+	//}
 
 	log.Info().Str("Game Tag", tag).
 		Str("Game Name", name).
@@ -211,7 +220,6 @@ func (env *environment) initDNSServer(ctx context.Context, bridge string) error 
 
 	contID := DNS.ID()
 	//HardCoded Mac Address Container
-	fmt.Printf("AICI e ID = %s\n", contID)
 
 	i := 1
 
@@ -231,23 +239,26 @@ func (env *environment) initDNSServer(ctx context.Context, bridge string) error 
 func (env *environment) initFTPMalws(ctx context.Context, bridge string) error {
 	//New(bridge, IPanswer string)
 	//defer wg.Done()
-	//Todo: asta nu merge !! FMMMSIII
 	//var string malwarePath
-	malwarePath := "/home/rvm/sandbox/bad/upload"
+	malwarePath := fmt.Sprintf("/home/rvm/sandbox/bad/upload")
+
+	hostKeysED := "/home/rvm/sandbox/sandbox233/keysftp/ssh_host_ed25519_key"
+	hostKeysRSA := "/home/rvm/sandbox/sandbox233/keysftp/ssh_host_rsa_key"
 	ftp := docker.NewContainer(docker.ContainerConfig{
 		Image: "atmoz/sftp",
 		Mounts: []string{
 			fmt.Sprintf("%s:/home/foo/upload", malwarePath),
+			fmt.Sprintf("%s:/etc/ssh/ssh_host_ed25519_key", hostKeysED),
+			fmt.Sprintf("%s:/etc/ssh/ssh_host_rsa_key", hostKeysRSA),
 			//fmt.Sprintf("",dir ),
 		},
 		Labels: map[string]string{
-			"nap-sandbox": bridge,
+			fmt.Sprintf("sandbox-%s", bridge): bridge,
 			//"sandbox-networks": strings.Join(nets, ","),
 
 		},
 		Cmd: []string{"foo:pass:1001"},
 	})
-
 	if err := ftp.Create(ctx); err != nil {
 		log.Error().Err(err).Msg("creating container")
 		return err
@@ -279,54 +290,13 @@ func (env *environment) initFTPMalws(ctx context.Context, bridge string) error {
 	return nil
 }
 
-//configureMonitor will configure the monitoring VM by attaching the correct interfaces
-func (env *environment) configureMonitor(ctx context.Context, bridge string, nets []models.Network) error {
-
-	log.Info().Str("sandbox tag", bridge).Msg("creating monitoring network")
-	if err := env.createPort(bridge, "monitoring", 0); err != nil {
-		return err
-	}
-
-	//TODO: Create mirror for each VLAN
-	//		Change the mirror AllBlue to VLAN specific
-	//mirror := fmt.Sprintf("%s_mirror", bridge)
-	//
-	//log.Info().Str("sandbox tag", bridge).Msg("Creating the network mirror")
-	//if err := env.controller.Ovs.VSwitch.CreateMirrorforBridge(mirror, bridge); err != nil {
-	//	log.Error().Err(err).Msg("creating mirror")
-	//	return err
-	//}
-	//
-	//if err := env.createPort(bridge, "AllBlue", 0); err != nil {
-	//	return err
-	//}
-	//
-	//portUUID, err := env.controller.Ovs.VSwitch.GetPortUUID(fmt.Sprintf("%s_AllBlue", bridge))
-	//if err != nil {
-	//	log.Error().Err(err).Str("port", fmt.Sprintf("%s_AllBlue", bridge)).Msg("getting port uuid")
-	//	return err
-	//}
-	//
-	//var vlans []string
-	//for _, network := range nets {
-	//	vlans = append(vlans, fmt.Sprint(network.Tag))
-	//}
-	//
-	//if err := env.controller.Ovs.VSwitch.MirrorAllVlans(mirror, portUUID, vlans); err != nil {
-	//	log.Error().Err(err).Msgf("mirroring traffic")
-	//	return err
-	//}
-	//
-	return nil
-}
-
 func (env *environment) addTargetVM(ctx context.Context, bridge string) error {
 
-	var special []string
+	//var special []string
 
 	log.Info().Str("sandbox tag", bridge).Msg("creating special interface")
 	if err := env.createPort(bridge, "special", 10); err != nil {
-		log.Error().Err(err).Msg("creating mirror")
+		log.Error().Err(err).Msg("creating target port")
 
 		return err
 	}
@@ -335,69 +305,70 @@ func (env *environment) addTargetVM(ctx context.Context, bridge string) error {
 	//		pentru portul unde e masina compromisa
 
 	dt := time.Now()
-	dt.Format("01022006_150405_Mon")
+	//dt.Format("01022006_150405_Mon")
+	log.Info().Msg("Starting the tcpdump")
 	targetIntf := fmt.Sprintf("%s_special", bridge)
-	log.Debug().Msg("ACUM urmeaza functia problema ")
+
 	go func() {
-		if err := env.controller.TCPdump.DumpTraffic(targetIntf, fmt.Sprintf("special_%s", dt.Format("01022006_150405_Mon"))); err != nil {
+		if err := env.controller.TCPdump.DumpTraffic(targetIntf, fmt.Sprintf("special_%s", dt.Format("01022006_1504_Mon"))); err != nil {
 			log.Error().Err(err).Str("interface: ", targetIntf).Msg("problem starting tcpdump")
 
 		}
 	}()
-
-	fmt.Println("este blocat aici sau doar dureaza mai mult?")
-	log.Debug().Msg("Oare chiar ramane blocat aici ")
-	////TODO: Vezi de ce moare
-	///AICI MOARE, DE CE MORI ?? DE CE NU MERGI MAI DEPARTE?? DE CE??
-
-	special = append(special, targetIntf)
-
-	vm, err := env.vlib.GetCopy(ctx, bridge,
-		vbox.InstanceConfig{Image: "pain3.ova",
-			CPU:      2,
-			MemoryMB: 4500},
-		vbox.SetBridge(special, true),
-		vbox.SetMAC("6CF0491A6E12", 1),
-	)
-
-	if err != nil {
-		log.Error().Err(err).Msg("creating copy of SoC VM")
-		return err
-	}
-	if vm == nil {
-		return ErrVMNotCreated
-	}
-	log.Debug().Str("VM", vm.Info().Id).Msg("starting VM")
-
-	if err := vm.Start(ctx); err != nil {
-		log.Error().Err(err).Msgf("starting virtual machine")
-		return err
-	}
-	env.instances = append(env.instances, vm)
+	time.Sleep(10 * time.Second)
+	log.Info().Msg("Started TCPDUMP script continues ")
+	//
+	//vm, err := env.vlib.GetCopy(ctx, bridge,
+	//	vbox.InstanceConfig{Image: "pain12023.ova",
+	//		CPU:      2,
+	//		MemoryMB: 6500},
+	//	vbox.SetBridge(special, true, 3),
+	//	vbox.SetMAC("6cf0491a6e12", 3),
+	//	//6c:f0:49:1a:6e:12
+	//)
+	//
+	//if err != nil {
+	//	log.Error().Err(err).Msg("creating copy of SoC VM")
+	//	return err
+	//}
+	//if vm == nil {
+	//	return ErrVMNotCreated
+	//}
+	//log.Debug().Str("VM", vm.Info().Id).Msg("starting VM")
+	//
+	//if err := vm.Start(ctx); err != nil {
+	//	log.Error().Err(err).Msgf("starting virtual machine")
+	//	return err
+	//}
+	//env.instances = append(env.instances, vm)
 
 	return nil
 }
 
-func (env *environment) initializeSOC(ctx context.Context, networks []string, mac string, tag string, nic int) error {
+func (env *environment) initializeSOC(ctx context.Context, networks []string, tag string, nic int, socPort uint) error {
 
 	vm, err := env.vlib.GetCopy(ctx, tag,
-		vbox.InstanceConfig{Image: "socWorking.ova",
-			CPU:      2,
-			MemoryMB: 8096},
-		//vbox.MapVMPort([]virtual.NatPortSettings{
-		//	{
-		//		HostPort:    strconv.FormatUint(uint64(socPort), 10),
-		//		GuestPort:   "22",
-		//		ServiceName: "sshd",
-		//		Protocol:    "tcp",
-		//	},
-		//}),
-		// SetBridge parameter cleanFirst should be enabled when wireguard/router instance
-		// is attaching to openvswitch network
-		vbox.SetBridge(networks, false),
-		vbox.SetMAC("04D3B09BEAD6", nic),
-	)
 
+		vbox.InstanceConfig{Image: "socmw23.ova",
+			//Name:     "socmw",
+			CPU:      2,
+			MemoryMB: 10800,
+		},
+		vbox.MapVMPort([]virtual.NatPortSettings{
+			{
+				HostPort:    strconv.FormatUint(uint64(socPort), 10),
+				GuestPort:   "5601",
+				ServiceName: "kib",
+				Protocol:    "tcp",
+			},
+		}, 1),
+		// SetBridge parameter cleanFirst should be enabled when if all previous interfaces should be deleted
+		// is attaching to openvswitch network
+		vbox.SetBridge(networks, false, 2),
+		vbox.SetMAC("04d3b09bea87", nic),
+		vbox.SetName(ctx),
+	)
+	//04:d3:b0:9b:ea:87
 	if err != nil {
 		log.Error().Err(err).Msg("creating copy of SoC VM")
 		return err
@@ -411,7 +382,7 @@ func (env *environment) initializeSOC(ctx context.Context, networks []string, ma
 		log.Error().Err(err).Msgf("starting virtual machine")
 		return err
 	}
-	env.instances = append(env.instances, vm)
+	//env.instances = append(env.instances, vm)
 
 	return nil
 }
@@ -420,7 +391,7 @@ func (env *environment) initOpnSenseVM(ctx context.Context, tag string, vlanPort
 
 	vm, err := env.vlib.GetCopy(ctx,
 		tag,
-		vbox.InstanceConfig{Image: "opnfuck.ova",
+		vbox.InstanceConfig{Image: "opnsenseINTpriv.ova",
 			CPU:      1,
 			MemoryMB: 1600},
 		vbox.MapVMPort([]virtual.NatPortSettings{
@@ -437,10 +408,10 @@ func (env *environment) initOpnSenseVM(ctx context.Context, tag string, vlanPort
 				ServiceName: "sshd",
 				Protocol:    "tcp",
 			},
-		}),
+		}, 2),
 		// SetBridge parameter cleanFirst should be enabled when wireguard/router instance
 		// is attaching to openvswitch network
-		vbox.SetBridge(vlanPorts, false),
+		vbox.SetBridge(vlanPorts, false, 0),
 	)
 
 	if err != nil {
@@ -448,7 +419,6 @@ func (env *environment) initOpnSenseVM(ctx context.Context, tag string, vlanPort
 		return err
 	}
 	if vm == nil {
-		fmt.Println("Banuiesc ca aici e o problema :)")
 		log.Debug().Str("VM", vm.Info().Id).Msg("starting VM")
 		return ErrVMNotCreated
 	}

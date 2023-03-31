@@ -61,6 +61,7 @@ type VM interface {
 
 type InstanceConfig struct {
 	Image    string  `yaml:"image"`
+	Name     string  `yaml:"name"`
 	MemoryMB uint    `yaml:"memoryMB"`
 	CPU      float64 `yaml:"cpu"`
 }
@@ -80,6 +81,7 @@ type vBoxLibrary struct {
 // VM information is stored in a struct
 type vm struct {
 	id      string
+	name    string
 	path    string
 	image   string
 	opts    []VMOpt
@@ -214,7 +216,7 @@ func removeAllNICs(ctx context.Context, vm *vm) error {
 	return nil
 }
 
-func SetBridge(nics []string, cleanFirst bool) VMOpt {
+func SetBridge(nics []string, cleanFirst bool, nicno uint) VMOpt {
 
 	// for defatt, go through provided nics.
 	return func(ctx context.Context, vm *vm) error {
@@ -231,18 +233,32 @@ func SetBridge(nics []string, cleanFirst bool) VMOpt {
 		i := 2 // first nic will be used for port mapping/forwarding
 		log.Info().Msgf("Nic List %v", nics)
 		for _, n := range nics {
-			log.Debug().Msgf("Attaching vlan %s to brigde adapter %s", n, fmt.Sprintf("--nic%d", i+1))
-			_, err := VBoxCmdContext(ctx, vboxModVM, vm.id, fmt.Sprintf("--nic%d", i+1), "bridged", fmt.Sprintf("--bridgeadapter%d", i+1), n)
-			if err != nil {
-				return err
+			if nicno != 0 {
+				log.Debug().Msgf("Attaching vlan %s to brigde adapter %s", n, fmt.Sprintf("--nic%d", nicno))
+				_, err := VBoxCmdContext(ctx, vboxModVM, vm.id, fmt.Sprintf("--nic%d", nicno), "bridged", fmt.Sprintf("--bridgeadapter%d", nicno), n)
+				if err != nil {
+					return err
+				}
+				log.Debug().Msgf("Allowing promisc mode for bridge name: %s ", fmt.Sprintf("--nicpromisc%d", nicno))
+				err = enableProsmiscMode(ctx, vm.id, int(nicno))
+				if err != nil {
+					return err
+				}
+				i++
+			} else {
+				log.Debug().Msgf("Attaching vlan %s to brigde adapter %s", n, fmt.Sprintf("--nic%d", i+1))
+				_, err := VBoxCmdContext(ctx, vboxModVM, vm.id, fmt.Sprintf("--nic%d", i+1), "bridged", fmt.Sprintf("--bridgeadapter%d", i+1), n)
+				if err != nil {
+					return err
+				}
+				log.Debug().Msgf("Allowing promisc mode for bridge name: %s ", fmt.Sprintf("--nicpromisc%d", i+1))
+				err = enableProsmiscMode(ctx, vm.id, i+1)
+				if err != nil {
+					return err
+				}
+				i++
 			}
-			// allows promiscuous mode
-			log.Debug().Msgf("Allowing promisc mode for bridge name: %s ", fmt.Sprintf("--nicpromisc%d", i+1))
-			err = enableProsmiscMode(ctx, vm.id, i+1)
-			if err != nil {
-				return err
-			}
-			i++
+
 		}
 
 		return nil
@@ -263,9 +279,9 @@ func PortForward(min, max int) VMOpt {
 
 //func SetNameofVM() VMOpt {
 //	//var vmName = ""
-//	return func(ctx context.Context, vm *vm) (error) {
+//	return func(ctx context.Context, vm *vm) error {
 //
-//		_, err := VBoxCmdContext(ctx, vboxModVM, vm.id, "--name", fmt.Sprintf("nap-%s", vm.id[:8]))
+//		_, err := VBoxCmdContext(ctx, vboxModVM, vm.id, "--name", fmt.Sprintf("soc-%s", vm.id[:8]))
 //		if err != nil {
 //			return err
 //		}
@@ -286,10 +302,10 @@ func enableProsmiscMode(ctx context.Context, vmID string, nic int) error {
 // note that  --natpf1  is not supported on Vbox 6+
 // use natpf1 if vbox version is  6 +
 //  [<name>],tcp|udp,[<hostip>],<hostport>,[<guestip>], <guestport>
-func MapVMPort(portMapping []virtual.NatPortSettings) VMOpt {
+func MapVMPort(portMapping []virtual.NatPortSettings, natIntf uint) VMOpt {
 	return func(ctx context.Context, vm *vm) error {
 		for _, p := range portMapping {
-			_, err := VBoxCmdContext(ctx, vboxModVM, vm.id, "--natpf2", fmt.Sprintf("%s,%s,,%s,,%s", p.ServiceName, p.Protocol, p.HostPort, p.GuestPort))
+			_, err := VBoxCmdContext(ctx, vboxModVM, vm.id, fmt.Sprintf("--natpf%d", natIntf), fmt.Sprintf("%s,%s,,%s,,%s", p.ServiceName, p.Protocol, p.HostPort, p.GuestPort))
 			if err != nil {
 				return err
 			}
@@ -350,6 +366,16 @@ func SetRAM(mb uint) VMOpt {
 func SetMAC(macaddr string, nic int) VMOpt {
 	return func(ctx context.Context, vm *vm) error {
 		_, err := VBoxCmdContext(ctx, vboxModVM, vm.id, fmt.Sprintf("--macaddress%d", nic), macaddr)
+		return err
+	}
+}
+
+//vboxmanage modifyvm ORIGNAL_NAME --name NEW_NAME
+func SetName(ctx context.Context) VMOpt {
+	return func(ctx context.Context, vm *vm) error {
+		newID := strings.Replace(uuid.New().String(), "-", "", -1)
+		newID = fmt.Sprintf("soc-%s", newID)
+		_, err := VBoxCmdContext(ctx, vboxModVM, vm.id, "--name", newID)
 		return err
 	}
 }
@@ -480,7 +506,6 @@ func (lib *vBoxLibrary) GetCopy(ctx context.Context, tag string, conf InstanceCo
 	vm, ok := lib.known[path]
 	if ok {
 		return vm.LinkedClone(ctx, tag, "origin", vmOpts...) // if ok==true then VM will be linked without the ram value which is exist on configuration file
-		// vbox.SetRAM(conf.memoryMB) on addFrontend function in lab.go fixes the problem...
 	}
 	// if ok==false, then following codes will be run, in that case there will be no problem because at the end instance returns with specified VMOpts parameter.
 	sum, err := checksumOfFile(path)
@@ -513,6 +538,10 @@ func (lib *vBoxLibrary) GetCopy(ctx context.Context, tag string, conf InstanceCo
 
 	if conf.MemoryMB != 0 {
 		vmOpts = append(vmOpts, SetRAM(conf.MemoryMB))
+	}
+
+	if conf.Name != "" {
+		vmOpts = append(vmOpts, SetName(ctx))
 	}
 
 	instance, err := vm.LinkedClone(ctx, tag, "origin", vmOpts...)
