@@ -46,10 +46,11 @@ type environment struct {
 }
 
 type SandConfig struct {
-	Name   string
-	Tag    string
-	env    *environment
-	Config *config.Config
+	Name    string
+	Tag     string
+	BlockNo uint // number of the infrastructure block to run
+	env     *environment
+	Config  *config.Config
 }
 
 func NewSandbox(sandconf *SandConfig) (*SandConfig, error) {
@@ -71,7 +72,7 @@ func NewSandbox(sandconf *SandConfig) (*SandConfig, error) {
 	return sandconf, nil
 }
 
-func (gc *SandConfig) StartSandbox(ctx context.Context, tag, name string, scenarios map[int]store.Scenario) error {
+func (gc *SandConfig) StartSandbox(ctx context.Context, tag, name string, blockNo uint, scenarios map[int]store.Scenario) error {
 
 	scenario, ok := scenarios[0]
 	if !ok {
@@ -125,7 +126,7 @@ func (gc *SandConfig) StartSandbox(ctx context.Context, tag, name string, scenar
 	}
 
 	//initFTPMalws
-	if err := gc.env.initFTPMalws(ctx, tag); err != nil {
+	if err := gc.env.initFTPMalws(ctx, tag, blockNo); err != nil {
 		log.Error().Err(err).Msg("Problem booting targetWin VM")
 		return err
 	}
@@ -236,11 +237,11 @@ func (env *environment) initDNSServer(ctx context.Context, bridge string) error 
 	return nil
 }
 
-func (env *environment) initFTPMalws(ctx context.Context, bridge string) error {
+func (env *environment) initFTPMalws(ctx context.Context, bridge string, blockNo uint) error {
 	//New(bridge, IPanswer string)
 	//defer wg.Done()
 	//var string malwarePath
-	malwarePath := fmt.Sprintf("/home/rvm/sandbox/bad/upload")
+	malwarePath := fmt.Sprintf("/home/rvm/sandbox/bad/upload%d", blockNo)
 
 	hostKeysED := "/home/rvm/sandbox/sandbox233/keysftp/ssh_host_ed25519_key"
 	hostKeysRSA := "/home/rvm/sandbox/sandbox233/keysftp/ssh_host_rsa_key"
