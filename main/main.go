@@ -21,19 +21,20 @@ import (
 
 func main() {
 	//TODO: add the target vm localtion and specific VM
-	//var (
-	//	tag        string
-	//	vmsName    string
-	//	targetVM   string
-	//	networksNo int
-	//)
+	var (
+		tag     string
+		blockNo uint
+		//	vmsName    string
+		//	targetVM   string
+		//	networksNo int
+	)
 
-	//	flag.StringVar(&tag, "tag", "test", "name of experiment")
+	flag.StringVar(&tag, "tag", "test", "name of experiment")
 	//	flag.StringVar(&vmsName, "vmsName", "ubuntu.ova", "name of the target machine")
 	//	flag.StringVar(&targetVM, "targetVM", "ubuntu.ova", "name for rest of virtual machines")
-	//	flag.IntVar(&networksNo, "networksNo", 3, "number of networks")
+	flag.UintVar(&blockNo, "noblk", 1, "number of the paralel block")
 	//
-	//	flag.Parse()
+	flag.Parse()
 	//
 	//	fmt.Println("tag:", tag)
 	//	fmt.Println("networksNo:", networksNo)
@@ -63,9 +64,10 @@ func main() {
 	}
 
 	sandboxConf := sandbox.SandConfig{
-		Name:   "sandbox2",
-		Tag:    "test",
-		Config: configuration,
+		Name:    "sandbox2",
+		Tag:     tag,
+		BlockNo: blockNo,
+		Config:  configuration,
 	}
 
 	sand, err := sandbox.NewSandbox(&sandboxConf)
@@ -75,7 +77,7 @@ func main() {
 
 	fmt.Println("Acum urmeaza problema")
 
-	if err := sand.StartSandbox(context.TODO(), sandboxConf.Tag, sandboxConf.Name, scenarios); err != nil {
+	if err := sand.StartSandbox(context.TODO(), sandboxConf.Tag, sandboxConf.Name, sandboxConf.BlockNo, scenarios); err != nil {
 		log.Error().Msg("Problem in starting the sandbox2")
 	}
 
