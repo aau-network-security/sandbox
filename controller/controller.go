@@ -25,6 +25,13 @@ type NetController struct {
 	// Ovs Client
 	Ovs *ovs.Client
 
+	// IpPool
+
+	IPPool *IPPool
+
+	//TCPDUMP
+	TCPdump *TCPdump
+
 	// Used to enable root command
 	sudo bool
 
@@ -110,11 +117,17 @@ func New(options ...OptionFunc) *NetController {
 		c: c,
 	}
 
-	c.Ovs = ovs.New(ovs.Sudo(), ovs.Debug(true))
+	tcpdump := &TCPdump{
+		c: c,
+	}
+
+	c.Ovs = ovs.New(ovs.Sudo(), ovs.Debug(false))
 
 	c.IPService = ip
 
 	c.IFConfig = ifconf
+
+	c.TCPdump = tcpdump
 
 	return c
 }

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 
-# todo: will be modified with more dynamic way of cleaning stuff
+
 
 #request sudo....
 #if [[ $UID != 0 ]]; then
@@ -10,28 +10,32 @@
 #    exit 1
 #fi
 
-sudo ovs-vsctl del-br test
-sudo ip tuntap del tap0 mode tap
-sudo ip tuntap del tap10 mode tap
-sudo ip tuntap del tap20 mode tap
-sudo ip tuntap del tap30 mode tap
-sudo ip tuntap del tap40 mode tap
-sudo ip tuntap del tap50 mode tap
-sudo ip tuntap del tap60 mode tap
-sudo ip tuntap del vlan110 mode tap
-sudo ip tuntap del vlan220 mode tap
-sudo ip tuntap del vlan330 mode tap
-sudo ip tuntap del vlan440 mode tap
-sudo ip tuntap del vlan550 mode tap
-sudo ip tuntap del mon10 mode tap
-sudo ip tuntap del ALLblue mode tap
+while getopts "b:" arg; do
+  case $arg in
+    b) bridge=$OPTARG;;
+  esac
+done
+
+sudo kill $(ps -e | pgrep tcpdump);
+
+sudo ovs-vsctl del-br $bridge
+sudo ip link del ${bridge}_vlan10
+sudo ip link del ${bridge}_vlan20
+sudo ip link del ${bridge}_vlan30
+sudo ip link del ${bridge}_AllBlue
+sudo ip link del ${bridge}_monitoring
 
 
-VBoxManage list runningvms | awk '/sandbox/ {print $1}' | xargs -I vmid VBoxManage controlvm vmid poweroff
-VBoxManage list vms | awk '/sandbox/ {print $2}' | xargs -I vmid VBoxManage unregistervm --delete vmid
+VBoxManage list runningvms | awk '/'$bridge'/ {print $1}' | xargs -I vmid VBoxManage controlvm vmid poweroff
+VBoxManage list vms | awk '/'$bridge'/ {print $1}' | xargs -I vmid VBoxManage unregistervm --delete vmid
+VBoxManage list runningvms | awk '/'$bridge'/ {print $2}' | xargs -I vmid VBoxManage controlvm vmid poweroff
+VBoxManage list vms | awk '/'$bridge'/ {print $2}' | xargs -I vmid VBoxManage unregistervm --delete vmid
 
 
-rm -rf ~/VirtualBox\ VMs/sandbox*
+
+
+rm -rf ~/VirtualBox\ VMs/nap-$bridge-*
+rm -rf ~/VirtualBox\ VMs/$bridge-*
 
 #while read -r line; do
  #   vm=$(echo $line | cut -d ' ' -f 2)
@@ -45,18 +49,12 @@ rm -rf ~/VirtualBox\ VMs/sandbox*
 # Remove all docker containers that have a UUID as name
 #docker ps -a --format '{{.Names}}' | grep -E '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | xargs docker rm -f
 
-docker kill $(docker ps -q -a -f "label=sandbox")
+docker kill $(docker ps -q -a -f "label=nap-sandbox")
 
-docker rm $(docker ps -q -a -f "label=sandbox")
-
-
-
-
-# Remove all macvlan networks
-docker network rm $(docker network ls -q -f "label=sandbox")
+docker rm $(docker ps -q -a -f "label=nap-sandbox")
 
 # Prune entire docker
-docker system prune --filter "label=sandbox"
+docker system prune --filter "label=nap-sandbox"
 
 # Prune volumes
-docker volume prune --filter "label=sandbox"
+docker volume prune --filter "label=nap-sandbox"

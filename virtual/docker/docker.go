@@ -15,14 +15,11 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"net"
-
-	"io"
 
 	"github.com/aau-network-security/sandbox/virtual"
 	docker "github.com/fsouza/go-dockerclient"
@@ -49,8 +46,6 @@ var (
 	Registries = map[string]docker.AuthConfiguration{
 		"": {},
 	}
-
-	ipPool = newIPPoolFromHost()
 )
 
 func init() {
@@ -60,7 +55,7 @@ func init() {
 		log.Fatal().Err(err).Msg("")
 	}
 
-	DefaultLinkBridge, err = newDefaultBridge("defatt-bridge")
+	DefaultLinkBridge, err = newDefaultBridge("sandbox-bridge")
 	if err != nil {
 		log.Fatal().Err(err).Msg("Error creating default bridge")
 	}
@@ -132,10 +127,10 @@ type ContainerConfig struct {
 	Mounts       []string
 	Resources    *Resources
 	Cmd          []string
-	DNS          []string
-	UsedPorts    []string
-	UseBridge    bool
-	RunTimeArgs  ContainerRunTimeArgs
+	//DNS          []string
+	UsedPorts   []string
+	UseBridge   bool
+	RunTimeArgs ContainerRunTimeArgs
 }
 
 type ContainerRunTimeArgs struct {
@@ -211,7 +206,7 @@ func (c *container) getCreateConfig() (*docker.CreateContainerOptions, error) {
 		hostIP := ""
 		hostPort := hostListen
 
-		if strings.Contains(guestPort, "/") == false {
+		if strings.Contains(guestPort, "/") {
 			log.Debug().Msgf("No protocol specified for portBind %s, defaulting to TCP.", guestPort)
 			guestPort = guestPort + "/tcp"
 		}
@@ -289,19 +284,6 @@ func (c *container) getCreateConfig() (*docker.CreateContainerOptions, error) {
 
 	hostConf.PortBindings = bindings
 	hostConf.Mounts = mounts
-
-	if len(c.conf.DNS) > 0 {
-		resolvPath, err := getResolvFile(c.conf.DNS)
-		if err != nil {
-			return nil, err
-		}
-
-		hostConf.Mounts = append(hostConf.Mounts, docker.HostMount{
-			Target: "/etc/resolv.conf",
-			Source: resolvPath,
-			Type:   "bind",
-		})
-	}
 
 	ports := make(map[docker.Port]struct{})
 	for _, p := range c.conf.UsedPorts {
@@ -455,7 +437,7 @@ func (c *container) Info() virtual.InstanceInfo {
 	return virtual.InstanceInfo{
 		Image: c.conf.Image,
 		Type:  "docker",
-		Id:    c.ID()[0:12],
+		Id:    c.ID(),
 		State: c.state(),
 	}
 }
@@ -497,237 +479,6 @@ func (c *container) Close() error {
 
 func (c *container) BridgeAlias(alias string) (string, error) {
 	return DefaultLinkBridge.connect(c.id, alias)
-}
-
-type network struct {
-	net       *docker.Network
-	subnet    string
-	ipPool    map[uint8]struct{}
-	connected []Identifier
-}
-
-type Network interface {
-	FormatIP(num int) string
-	Interface() string
-	Connect(c Container, ip ...int) (int, error)
-	io.Closer
-}
-
-func NewNetwork() (Network, error) {
-	sub, err := ipPool.Get()
-	if err != nil {
-		return nil, err
-	}
-
-	subnet := fmt.Sprintf("%s.0/24", sub)
-	conf := docker.CreateNetworkOptions{
-		Name:   uuid.New().String(),
-		Driver: "macvlan",
-		IPAM: &docker.IPAMOptions{
-			Config: []docker.IPAMConfig{{
-				Subnet: subnet,
-			}},
-		},
-		Labels: map[string]string{
-			"kn": "lab_network",
-		},
-	}
-
-	netw, err := DefaultClient.CreateNetwork(conf)
-	if err != nil {
-		return nil, err
-	}
-
-	netInfo, _ := DefaultClient.NetworkInfo(netw.ID)
-	subnet = netInfo.IPAM.Config[0].Subnet
-
-	ipPool := make(map[uint8]struct{})
-	for i := 30; i < 255; i++ {
-		ipPool[uint8(i)] = struct{}{}
-	}
-
-	return &network{net: netw, subnet: subnet, ipPool: ipPool}, nil
-}
-
-func (n *network) Close() error {
-	for _, cont := range n.connected {
-		if err := DefaultClient.DisconnectNetwork(n.net.ID, docker.NetworkConnectionOptions{
-			Container: cont.ID(),
-		}); err != nil {
-			continue
-		}
-	}
-
-	return DefaultClient.RemoveNetwork(n.net.ID)
-}
-
-func (n *network) FormatIP(num int) string {
-	return fmt.Sprintf("%s.%d", n.subnet[0:len(n.subnet)-5], num)
-}
-
-func (n *network) Interface() string {
-	return fmt.Sprintf("dm-%s", n.net.ID[0:12])
-}
-
-func (n *network) getRandomIP() int {
-	for randDigit := range n.ipPool {
-		delete(n.ipPool, randDigit)
-		return int(randDigit)
-	}
-	return 0
-}
-
-func (n *network) releaseIP(ip string) {
-	parts := strings.Split(ip, ".")
-	strDigit := parts[len(parts)-1]
-
-	num, err := strconv.Atoi(strDigit)
-	if err != nil {
-		return
-	}
-
-	n.ipPool[uint8(num)] = struct{}{}
-}
-
-func (n *network) Connect(c Container, ip ...int) (int, error) {
-	var lastDigit int
-
-	if len(ip) > 0 {
-		lastDigit = ip[0]
-	} else {
-		lastDigit = n.getRandomIP()
-	}
-
-	ipAddr := n.FormatIP(lastDigit)
-
-	err := DefaultClient.ConnectNetwork(n.net.ID, docker.NetworkConnectionOptions{
-		Container: c.ID(),
-		EndpointConfig: &docker.EndpointConfig{
-			IPAMConfig: &docker.EndpointIPAMConfig{
-				IPv4Address: ipAddr,
-			},
-			IPAddress: ipAddr,
-		},
-	})
-	if err != nil {
-		if len(ip) == 0 {
-			n.releaseIP(ipAddr)
-		}
-
-		return lastDigit, err
-	}
-
-	n.connected = append(n.connected, c)
-
-	return lastDigit, nil
-}
-
-type IPPool struct {
-	m       sync.Mutex
-	ips     map[string]struct{}
-	weights map[string]int
-}
-
-func newIPPoolFromHost() *IPPool {
-	ips := map[string]struct{}{}
-	weights := map[string]int{
-		"172": 7 * 255,   // 172.{2nd}.{0-255}.{0-255} => 2nd => 25-31 => 6 + 1 => 7
-		"10":  255 * 255, // 10.{2nd}.{0-255}.{0-255} => 2nd => 0-254 => 254 + 1 => 255
-		"192": 1 * 255,   // 10.{2nd}.{0-255}.{0-255} => 2nd => 198-198 => 0 + 1 => 1
-	}
-
-	ifaces, err := net.Interfaces()
-	if err == nil {
-		for _, i := range ifaces {
-			addrs, err := i.Addrs()
-			if err != nil {
-				continue
-			}
-
-			for _, a := range addrs {
-				addr, ok := a.(*net.IPNet)
-				if !ok {
-					continue
-				}
-
-				if addr.IP.To4() == nil {
-					// not v4
-					continue
-				}
-
-				ipParts := strings.Split(addr.IP.String(), ".")
-				lvl1 := ipParts[0]
-				if _, ok = weights[lvl1]; !ok {
-					// not relevant ip
-					continue
-				}
-
-				ipStr := strings.Join(ipParts[0:3], ".")
-				ips[ipStr] = struct{}{}
-
-				weights[lvl1] = weights[lvl1] - 1
-			}
-		}
-	}
-
-	return &IPPool{
-		ips:     ips,
-		weights: weights,
-	}
-}
-
-func (ipp *IPPool) Get() (string, error) {
-	ipp.m.Lock()
-	defer ipp.m.Unlock()
-
-	if len(ipp.ips) > 60000 {
-		return "", NoAvailableIPsErr
-	}
-
-	genIP := func() string {
-		ip := randomPickWeighted(ipp.weights)
-		switch ip {
-		case "172":
-			ip += fmt.Sprintf(".%d", rand.Intn(6)+25)
-		case "192":
-			ip += ".168"
-		case "10":
-			ip += fmt.Sprintf(".%d", rand.Intn(255))
-		}
-
-		ip += fmt.Sprintf(".%d", rand.Intn(255))
-
-		return ip
-	}
-
-	var ip string
-	exists := true
-	for exists {
-		ip = genIP()
-		_, exists = ipp.ips[ip]
-	}
-
-	ipp.ips[ip] = struct{}{}
-
-	return ip, nil
-}
-
-func randomPickWeighted(m map[string]int) string {
-	var totalWeight int
-	for _, w := range m {
-		totalWeight += w
-	}
-
-	r := rand.Intn(totalWeight)
-
-	for k, w := range m {
-		r -= w
-		if r <= 0 {
-			return k
-		}
-	}
-
-	return ""
 }
 
 type defaultBridge struct {

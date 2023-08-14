@@ -6,105 +6,45 @@ package dns
 
 import (
 	"context"
-	"fmt"
-	"io/ioutil"
-	"os"
+	"github.com/aau-network-security/sandbox/virtual"
 
-	"io"
+	//"github.com/aau-network-security/defatt/sandbox"
+	//"github.com/aau-network-security/sandbox2/store"
+	//"github.com/aau-network-security/defatt/virtual"
 
 	"github.com/aau-network-security/sandbox/virtual/docker"
 	"github.com/rs/zerolog/log"
 )
 
-const (
-	PreferedIP      = 3
-	coreFileContent = `. {
-    file zonefile
-    prometheus     # enable metrics
-    errors         # show errors
-    log            # enable query logs
-}
-`
-	zonePrefixContent = `$ORIGIN .
-@   3600 IN SOA sns.dns.icann.org. noc.dns.icann.org. (
-                2017042745 ; serial
-                7200       ; refresh (2 hours)
-                3600       ; retry (1 hour)
-                1209600    ; expire (2 weeks)
-                3600       ; minimum (1 hour)
-                )
-
-`
-)
-
 type Server struct {
 	cont     docker.Container
-	confFile string
-	io.Closer
+	IPanswer string
+	IPbind   string
+	bindPort string
+	//corefile string
+	//zonefile string
+	//ipList   map[string]string
 }
 
-type RR struct {
-	Name  string
-	Type  string
-	RData string
-}
+func New(ctx context.Context, bridge string) (*Server, error) {
 
-func (rr *RR) Format() string {
-	return fmt.Sprintf("%s IN %s %s", rr.Name, rr.Type, rr.RData)
-}
-
-func New(records []RR) (*Server, error) {
-	f, err := ioutil.TempFile("", "zonefile")
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	c, err := ioutil.TempFile("", "Corefile")
-	if err != nil {
-		return nil, err
-	}
-	defer c.Close()
-
-	confFile := f.Name()
-
-	f.Write([]byte(zonePrefixContent))
-
-	for _, r := range records {
-		_, err = f.Write([]byte(r.Format() + "\n"))
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	coreFile := c.Name()
-
-	c.Write([]byte(coreFileContent))
-
-	f.Sync()
-	cont := docker.NewContainer(docker.ContainerConfig{
-		Image: "coredns/coredns:1.6.1",
-		Mounts: []string{
-			fmt.Sprintf("%s:/Corefile", coreFile),
-			fmt.Sprintf("%s:/zonefile", confFile),
-		},
-		UsedPorts: []string{
-			"53/tcp",
-			"53/udp",
-		},
-		Resources: &docker.Resources{
-			MemoryMB: 50,
-			CPU:      0.3,
-		},
-		Cmd: []string{"--conf", "Corefile"},
+	container := docker.NewContainer(docker.ContainerConfig{
+		Image: "docker.io/rasmim/fakedns",
 		Labels: map[string]string{
-			"nap": "lab_dns",
+			"nap-sandbox": bridge,
 		},
+
+		Resources: &docker.Resources{
+			MemoryMB: 60,
+			CPU:      0.5,
+		},
+		Cmd: []string{"/fakedns/fakedns.py", "-a", "10.10.10.55"},
 	})
 
 	return &Server{
-		cont:     cont,
-		confFile: confFile,
+		cont: container,
+		//corefile: Corefile,
+		//zonefile: zonefile,
 	}, nil
 }
 
@@ -116,10 +56,22 @@ func (s *Server) Run(ctx context.Context) error {
 	return s.cont.Run(ctx)
 }
 
+//func (s *Server) Close(ctx context.Context) error {
+//	if err := os.Remove(s.corefile); err != nil {
+//		log.Warn().Msgf("error while removing DNS configuration file: %s", err)
+//	}
+//
+//	if err := s.cont.Close(); err != nil {
+//		log.Warn().Msgf("error while closing DNS container: %s", err)
+//	}
+//
+//	return nil
+//}
+
 func (s *Server) Close() error {
-	if err := os.Remove(s.confFile); err != nil {
-		log.Warn().Msgf("error while removing DNS configuration file: %s", err)
-	}
+	//if err := os.Remove(s.cont); err != nil {
+	//	log.Warn().Msgf("error while removing DNS configuration file: %s", err)
+	//}
 
 	if err := s.cont.Close(); err != nil {
 		log.Warn().Msgf("error while closing DNS container: %s", err)
@@ -128,6 +80,50 @@ func (s *Server) Close() error {
 	return nil
 }
 
+func (s *Server) Create(ctx context.Context) error {
+	if err := s.cont.Create(ctx); err != nil {
+		log.Error().Err(err).Msg("creating container DNS")
+		return err
+	}
+	return nil
+}
+
+func (s *Server) Start(ctx context.Context) error {
+	if err := s.cont.Start(ctx); err != nil {
+		log.Error().Err(err).Msg("starting container")
+		return err
+	}
+	return nil
+}
+
+//func (s *Server) Execute(ctx context.Context, i []string, s2 string) error {
+//	panic("implement me")
+//}
+//
+//func (s *Server) Suspend(ctx context.Context) error {
+//	panic("implement me")
+//}
+//
+//func (s *Server) Info() virtual.InstanceInfo {
+//	panic("implement me")
+//}
+
+func (s *Server) ID() string {
+	return s.cont.ID()
+}
+
 func (s *Server) Stop() error {
 	return s.cont.Stop()
+}
+
+func (s *Server) Execute(ctx context.Context, strings []string, s2 string) error {
+	panic("implement me")
+}
+
+func (s *Server) Suspend(ctx context.Context) error {
+	return s.cont.Suspend(ctx)
+}
+
+func (s *Server) Info() virtual.InstanceInfo {
+	panic("implement me")
 }
