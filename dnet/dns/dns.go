@@ -33,9 +33,8 @@ func New(ctx context.Context, bridge string) (*Server, error) {
 		Labels: map[string]string{
 			"nap-sandbox": bridge,
 		},
-
 		Resources: &docker.Resources{
-			MemoryMB: 60,
+			MemoryMB: 100,
 			CPU:      0.5,
 		},
 		Cmd: []string{"/fakedns/fakedns.py", "-a", "10.10.10.55"},

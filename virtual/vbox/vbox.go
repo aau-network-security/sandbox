@@ -613,3 +613,4 @@ func VBoxCmdContext(ctx context.Context, cmd string, cmds ...string) ([]byte, er
 
 	return out, nil
 }
+

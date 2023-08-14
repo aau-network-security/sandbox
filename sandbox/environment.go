@@ -10,6 +10,7 @@ import (
 	"github.com/aau-network-security/sandbox/dnet/dns"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"os/user"
 	"strconv"
 	"sync"
 	"time"
@@ -241,10 +242,26 @@ func (env *environment) initFTPMalws(ctx context.Context, bridge string, blockNo
 	//New(bridge, IPanswer string)
 	//defer wg.Done()
 	//var string malwarePath
-	malwarePath := fmt.Sprintf("/home/rvm/sandbox/bad/upload%d", blockNo)
 
-	hostKeysED := "/home/rvm/sandbox/sandbox233/keysftp/ssh_host_ed25519_key"
-	hostKeysRSA := "/home/rvm/sandbox/sandbox233/keysftp/ssh_host_rsa_key"
+	user, err := user.Current()
+	if err != nil {
+		log.Error().Err(err).Msg("problem getting user id")
+		panic(err)
+	}
+
+	userID := user.Uid
+	log.Info().Msgf("Printing the user ID for control:", userID)
+	fmt.Println("")
+	malwarePath := fmt.Sprintf("/home/vlad/samplevirs/upload%d", blockNo)
+
+	//dir, err := os.Getwd() // get working directory
+	//if err != nil {
+	//	log.Error().Msgf("Error getting the working dir %v", err)
+	//}
+	//"keysftp/ssh_host_ed25519_key"
+	hostKeysED := "/home/vlad/sand2/keysftp/ssh_host_ed25519_key"
+	//hostKeysRSA := "/home/rvm/sandbox/sandbox233/keysftp/ssh_host_rsa_key"
+	hostKeysRSA := "/home/vlad/sand2/keysftp/ssh_host_rsa_key"
 	ftp := docker.NewContainer(docker.ContainerConfig{
 		Image: "atmoz/sftp",
 		Mounts: []string{
@@ -258,7 +275,8 @@ func (env *environment) initFTPMalws(ctx context.Context, bridge string, blockNo
 			//"sandbox-networks": strings.Join(nets, ","),
 
 		},
-		Cmd: []string{"foo:pass:1001"},
+
+		Cmd: []string{"foo:pass:1003"},
 	})
 	if err := ftp.Create(ctx); err != nil {
 		log.Error().Err(err).Msg("creating container")
@@ -311,7 +329,7 @@ func (env *environment) addTargetVM(ctx context.Context, bridge string) error {
 	targetIntf := fmt.Sprintf("%s_special", bridge)
 
 	go func() {
-		if err := env.controller.TCPdump.DumpTraffic(targetIntf, fmt.Sprintf("special_%s", dt.Format("01022006_1504_Mon"))); err != nil {
+		if err := env.controller.TCPdump.DumpTraffic(targetIntf, fmt.Sprintf("special_%s_%s",bridge, dt.Format("01022006_1504_Mon"))); err != nil {
 			log.Error().Err(err).Str("interface: ", targetIntf).Msg("problem starting tcpdump")
 
 		}
@@ -433,3 +451,4 @@ func (env *environment) initOpnSenseVM(ctx context.Context, tag string, vlanPort
 
 	return nil
 }
+

@@ -43,7 +43,7 @@ hosts:
   - name: win12
     type: vbox
     networks: [ "10" ]
-    image: "win2012R.ova"
+    image: "win2012.ova"
   - name: testserver
     type: vbox
     networks: [ "10" ]
@@ -51,11 +51,11 @@ hosts:
   - name: testserver
     type: vbox
     networks: [ "10" ]
-    image: "win823.ova"
+    image: "emil81.ova"
   - name: testserver
     type: vbox
     networks: [ "10" ]
-    image: "csecMail2.ova"
+    image: "Win7.ova"
 
   - name: dionaea
     type: docker
